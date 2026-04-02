@@ -1,0 +1,53 @@
+{% if requests %}
+<div class="card overflow-hidden">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-100 bg-gray-50/60">
+        <th class="text-left px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-widest">Título</th>
+        <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-widest">Tipo</th>
+        <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-widest">Contrato</th>
+        <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-widest hidden md:table-cell">Solicitante</th>
+        <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-widest">Status</th>
+        <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Data</th>
+        <th class="px-6 py-3"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in requests %}
+      {% set tc = {"SCHEMA_CHANGE":("#7c3aed","#F5F3FF"),"SLA_CHANGE":("#0d9488","#F0FDFA"),"CREATE":("#185FA5","#EFF6FF"),"DEPRECATE":("#9ca3af","#F9FAFB")} %}
+      {% set sc = {"OPEN":("#185FA5","#EFF6FF"),"APPROVED":("#16a34a","#F0FDF4"),"REJECTED":("#dc2626","#FEF2F2"),"IN_REVIEW":("#7c3aed","#F5F3FF")} %}
+      {% set tc2, tbg = tc.get(r.type, ("#9ca3af","#F9FAFB")) %}
+      {% set sc2, sbg = sc.get(r.status, ("#9ca3af","#F9FAFB")) %}
+      <tr class="trow border-b border-gray-50 cursor-pointer transition-colors"
+        onclick="location.href='/requests/{{ r.id }}'">
+        <td class="px-6 py-4 text-gray-800 font-semibold">{{ r.title }}</td>
+        <td class="px-4 py-4">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold mono"
+            style="color:{{ tc2 }};background:{{ tbg }}">{{ r.type }}</span>
+        </td>
+        <td class="px-4 py-4">
+          <a href="/contracts/{{ r.contract_id }}" onclick="event.stopPropagation()"
+            class="text-xs mono text-gray-500 hover:text-orange-500 transition-colors font-medium">{{ r.contract_name }}</a>
+        </td>
+        <td class="px-4 py-4 text-gray-400 text-xs hidden md:table-cell">{{ r.requester_name }}</td>
+        <td class="px-4 py-4">
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold mono"
+            style="color:{{ sc2 }};background:{{ sbg }}">{{ r.status }}</span>
+        </td>
+        <td class="px-4 py-4 text-gray-400 mono text-xs hidden lg:table-cell">{{ r.updated_at }}</td>
+        <td class="px-6 py-4 text-right">
+          <span class="text-xs text-gray-300 hover:text-orange-500 font-semibold">Ver →</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card flex flex-col items-center justify-center py-20">
+  <svg class="w-10 h-10 mb-4 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+  </svg>
+  <p class="text-sm font-semibold text-gray-400">Nenhuma solicitação encontrada</p>
+</div>
+{% endif %}

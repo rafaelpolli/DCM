@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %} — Catálogo{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight text-gray-900">Catálogo de Contratos</h1>
+      <p class="text-sm text-gray-400 mt-0.5">{{ contracts | length }} contrato(s) encontrado(s)</p>
+    </div>
+    {% if role in ('creator','admin') %}
+    <a href="/contracts/new" class="btn-primary">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+      </svg>
+      Novo Contrato
+    </a>
+    {% endif %}
+  </div>
+
+  <!-- Filters -->
+  <div class="card p-3 flex flex-wrap gap-3 items-center">
+    <div class="relative flex-1 min-w-48">
+      <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+      </svg>
+      <input type="text" placeholder="Buscar por nome..." value="{{ q }}"
+        class="w-full bg-gray-50 border border-gray-200 text-gray-800 text-sm rounded-lg pl-9 pr-3 py-2 focus:outline-none focus:border-orange-400 focus:bg-white transition-colors mono placeholder-gray-300"
+        hx-get="/contracts" hx-target="#contracts-table" hx-trigger="keyup changed delay:300ms"
+        name="q" hx-include="[name='status'],[name='layer'],[name='q']"/>
+    </div>
+    <select name="status" hx-get="/contracts" hx-target="#contracts-table" hx-trigger="change"
+      hx-include="[name='status'],[name='layer'],[name='q']"
+      class="bg-gray-50 border border-gray-200 text-gray-500 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-orange-400 transition-colors">
+      <option value="" {% if not status %}selected{% endif %}>Todos os status</option>
+      {% for s in ["DRAFT","PENDING","APPROVED","REJECTED","DEPRECATED"] %}
+      <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    <select name="layer" hx-get="/contracts" hx-target="#contracts-table" hx-trigger="change"
+      hx-include="[name='status'],[name='layer'],[name='q']"
+      class="bg-gray-50 border border-gray-200 text-gray-500 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-orange-400 transition-colors">
+      <option value="" {% if not layer %}selected{% endif %}>Todas as layers</option>
+      {% for l in ["RAW","BRONZE","SILVER","GOLD"] %}
+      <option value="{{ l }}" {% if layer==l %}selected{% endif %}>{{ l }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div id="contracts-table">{% include "contracts/_table.html" %}</div>
+</div>
+{% endblock %}

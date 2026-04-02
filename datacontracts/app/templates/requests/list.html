@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %} — Solicitações{% endblock %}
+{% block content %}
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-bold tracking-tight text-gray-900">Solicitações de Alteração</h1>
+    <p class="text-sm text-gray-400 mt-0.5">{{ requests | length }} solicitação(ões)</p>
+  </div>
+
+  <!-- Filter pills -->
+  <div class="flex flex-wrap gap-2">
+    {% for s in ["","OPEN","IN_REVIEW","APPROVED","REJECTED"] %}
+    {% set label = s if s else "Todas" %}
+    {% set active = (status == s) %}
+    <a href="/requests{% if s %}?status={{ s }}{% endif %}"
+      class="px-4 py-1.5 rounded-full text-xs font-bold mono transition-all
+      {% if active %}text-white shadow-md{% else %}text-gray-500 bg-white border border-gray-200 hover:border-orange-300 hover:text-orange-600{% endif %}"
+      {% if active %}style="background:linear-gradient(135deg,#FF6200,#E05200);box-shadow:0 3px 10px rgba(255,98,0,.2)"{% endif %}>
+      {{ label }}
+    </a>
+    {% endfor %}
+  </div>
+
+  <div id="requests-table">{% include "requests/_table.html" %}</div>
+</div>
+{% endblock %}

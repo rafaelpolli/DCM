@@ -1,0 +1,12 @@
+{% set sc = {"OPEN":("#185FA5","#EFF6FF"),"APPROVED":("#16a34a","#F0FDF4"),"REJECTED":("#dc2626","#FEF2F2"),"IN_REVIEW":("#7c3aed","#F5F3FF")} %}
+{% set c2,bg2 = sc.get(req.status, ("#9ca3af","#F9FAFB")) %}
+<div id="action-area" class="text-xs text-gray-400 flex flex-col items-end gap-1">
+  <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold mono"
+    style="color:{{ c2 }};background:{{ bg2 }}">{{ req.status }}</span>
+  <span class="text-gray-400 mono">atualizado em {{ req.updated_at }}</span>
+</div>
+<script>
+  const sb = document.getElementById('status-badge');
+  if(sb){ sb.style.color='{{ c2 }}'; sb.style.background='{{ bg2 }}'; sb.textContent='{{ req.status }}'; }
+  {% if toast %}showToast("{{ toast }}"){% endif %}
+</script>

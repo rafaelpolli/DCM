@@ -1,0 +1,13 @@
+{% set status_val = r.status if r is defined else contract.status %}
+{% set badge_map = {
+  "DRAFT":      ("bg-zinc-700 text-zinc-300", "DRAFT"),
+  "PENDING":    ("bg-amber-900 text-amber-300", "PENDING"),
+  "APPROVED":   ("bg-green-900 text-green-300", "APPROVED"),
+  "REJECTED":   ("bg-red-900 text-red-300", "REJECTED"),
+  "DEPRECATED": ("bg-slate-700 text-slate-400", "DEPRECATED"),
+  "OPEN":       ("bg-blue-900 text-blue-300", "OPEN"),
+  "IN_REVIEW":  ("bg-purple-900 text-purple-300", "IN_REVIEW"),
+  "CREATE":     ("bg-teal-900 text-teal-300", "CREATE"),
+} %}
+{% set cls, label = badge_map.get(status_val, ("bg-zinc-700 text-zinc-300", status_val)) %}
+<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mono {{ cls }}">{{ label }}</span>

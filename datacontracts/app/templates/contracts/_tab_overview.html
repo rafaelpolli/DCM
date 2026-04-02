@@ -1,0 +1,57 @@
+<div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+  <!-- Metadata -->
+  <div class="card p-5 space-y-3">
+    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Metadados</h3>
+    {% for label, value in [
+      ("Domínio", contract.domain), ("Time", contract.team), ("Owner", contract.owner),
+      ("Sistema de origem", contract.source_system), ("Ambiente", contract.environment),
+      ("Criado em", contract.created_at), ("Atualizado em", contract.updated_at),
+    ] %}
+    <div class="flex justify-between items-center text-sm border-b border-gray-50 pb-2 last:border-0 last:pb-0">
+      <span class="text-gray-400">{{ label }}</span>
+      <span class="text-gray-800 mono text-xs font-medium">{{ value }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="space-y-4">
+    <!-- Classification -->
+    <div class="card p-5">
+      <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Classificação</h3>
+      {% set cls = {"INTERNAL":("#185FA5","#EFF6FF"),"CONFIDENTIAL":("#dc2626","#FEF2F2"),"PUBLIC":("#16a34a","#F0FDF4"),"RESTRICTED":("#FF6200","#FFF7ED")} %}
+      {% set cc,cbg = cls.get(contract.data_classification, ("#9ca3af","#F9FAFB")) %}
+      <span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-bold mono"
+        style="color:{{ cc }};background:{{ cbg }}">{{ contract.data_classification }}</span>
+    </div>
+    <!-- Tags -->
+    <div class="card p-5">
+      <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">Tags</h3>
+      <div class="flex flex-wrap gap-2">
+        {% for tag in contract.tags %}
+        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs bg-gray-100 text-gray-600 border border-gray-200 mono">#{{ tag }}</span>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- SLA -->
+  <div class="card p-5 md:col-span-2">
+    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">SLA</h3>
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+      {% for label, value in [
+        ("Freshness", contract.sla.freshness),
+        ("Latência máx.", contract.sla.max_latency_minutes ~ " min"),
+        ("Disponibilidade", contract.sla.availability_percent ~ "%"),
+        ("Retenção", contract.sla.retention_days ~ " dias"),
+        ("Alert e-mail", contract.sla.alert_email),
+      ] %}
+      <div class="bg-gray-50 border border-gray-100 rounded-xl p-3">
+        <div class="text-xs text-gray-400 mb-1">{{ label }}</div>
+        <div class="text-sm font-bold text-gray-800 mono">{{ value }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>

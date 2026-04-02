@@ -1,0 +1,18 @@
+<div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+  <div class="card p-5 space-y-4">
+    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Localização</h3>
+    {% for label, value in [("Layer",contract.location.layer),("Bucket",contract.location.bucket),("Path",contract.location.path),("Formato",contract.location.format),("Compressão",contract.location.compression)] %}
+    <div>
+      <div class="text-xs text-gray-400 mb-1">{{ label }}</div>
+      <div class="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 mono text-sm text-gray-800 font-medium">{{ value }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="card p-5">
+    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Path completo</h3>
+    <div class="bg-gray-900 rounded-xl p-4 mono text-sm text-green-400 break-all select-all">
+      {{ contract.location.bucket }}{{ contract.location.path }}
+    </div>
+    <p class="text-xs text-gray-400 mt-3">Formato: <span class="text-gray-700 mono font-medium">{{ contract.location.format }}</span> · Compressão: <span class="text-gray-700 mono font-medium">{{ contract.location.compression }}</span></p>
+  </div>
+</div>

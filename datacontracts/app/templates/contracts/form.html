@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+{% block title %} — Novo Contrato{% endblock %}
+{% block breadcrumb %}
+  <span class="text-zinc-500">/ </span><a href="/contracts" class="text-zinc-400 hover:text-white">Catálogo</a>
+  <span class="text-zinc-600"> / </span><span class="text-zinc-300">Novo Contrato</span>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+
+  <div class="mb-6">
+    <h1 class="text-2xl font-semibold text-white">Novo Contrato</h1>
+    <p class="text-sm text-zinc-500 mt-1">Preencha as informações em 3 etapas</p>
+  </div>
+
+  <!-- Step indicator -->
+  <div class="flex items-center gap-2 mb-8" id="step-indicator">
+    {% for i, label in [(1,"Identificação"),(2,"Localização & SLA"),(3,"Schema")] %}
+    <div class="flex items-center gap-2">
+      <div class="step-dot w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all
+        {% if step == i %}text-white{% elif step > i %}text-white{% else %}bg-zinc-800 text-zinc-500{% endif %}"
+        style="{% if step == i %}background:#185FA5{% elif step > i %}background:#16a34a{% endif %}"
+        data-step="{{ i }}">
+        {% if step > i %}✓{% else %}{{ i }}{% endif %}
+      </div>
+      <span class="text-xs {% if step == i %}text-zinc-200{% else %}text-zinc-600{% endif %}">{{ label }}</span>
+    </div>
+    {% if not loop.last %}<div class="flex-1 h-px bg-zinc-800"></div>{% endif %}
+    {% endfor %}
+  </div>
+
+  <form method="post" action="/contracts/new" id="contract-form">
+
+    <!-- Step 1 -->
+    <div class="step-panel {% if step != 1 %}hidden{% endif %}" data-panel="1">
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
+        <h2 class="text-sm font-semibold text-zinc-300 mb-4">Etapa 1 — Identificação</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="md:col-span-2">
+            <label class="block text-xs text-zinc-500 mb-1.5">Nome da tabela *</label>
+            <input name="name" required placeholder="ex: tb_orders_silver" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs text-zinc-500 mb-1.5">Descrição</label>
+            <textarea name="description" rows="2" placeholder="Descreva o propósito desta tabela..." class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 resize-none"></textarea>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Domínio</label>
+            <input name="domain" placeholder="ex: Commerce" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Time</label>
+            <input name="team" placeholder="ex: Data Engineering" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Owner</label>
+            <input name="owner" placeholder="ex: ana.silva@empresa.com" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Sistema de origem</label>
+            <input name="source_system" placeholder="ex: OMS, ERP, Kafka" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Classificação</label>
+            <select name="data_classification" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              {% for c in ["PUBLIC","INTERNAL","CONFIDENTIAL","RESTRICTED"] %}
+              <option value="{{ c }}" {% if c == "INTERNAL" %}selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Tags (separadas por vírgula)</label>
+            <input name="tags" placeholder="ex: silver, commerce, orders" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <button type="button" onclick="goStep(2)" class="px-5 py-2 rounded-lg text-sm font-medium text-white" style="background:#185FA5">
+            Próximo →
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="step-panel {% if step != 2 %}hidden{% endif %}" data-panel="2">
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6 space-y-4">
+        <h2 class="text-sm font-semibold text-zinc-300 mb-4">Etapa 2 — Localização & SLA</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Layer</label>
+            <select name="layer" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              {% for l in ["RAW","BRONZE","SILVER","GOLD"] %}
+              <option value="{{ l }}">{{ l }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Formato</label>
+            <select name="fmt" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              {% for f in ["PARQUET","DELTA","JSON","CSV","ORC","AVRO"] %}
+              <option value="{{ f }}">{{ f }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Bucket</label>
+            <input name="bucket" placeholder="ex: s3://datalake-prod" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Path</label>
+            <input name="path" placeholder="ex: /silver/commerce/orders/" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Compressão</label>
+            <select name="compression" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              {% for c in ["SNAPPY","GZIP","ZSTD","NONE"] %}
+              <option value="{{ c }}">{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Freshness</label>
+            <select name="freshness" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              {% for f in ["real-time","hourly","daily","weekly"] %}
+              <option value="{{ f }}">{{ f }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Latência máxima (min)</label>
+            <input name="max_latency_minutes" type="number" value="60" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Disponibilidade (%)</label>
+            <input name="availability_percent" type="number" step="0.1" value="99.0" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Retenção (dias)</label>
+            <input name="retention_days" type="number" value="365" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">E-mail de alerta</label>
+            <input name="alert_email" type="email" placeholder="team@empresa.com" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Estratégia de particionamento</label>
+            <select name="partition_strategy" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              {% for s in ["DATE","DATE_HOUR","MONTH","YEAR","NONE"] %}
+              <option value="{{ s }}">{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-zinc-500 mb-1.5">Coluna de partição</label>
+            <input name="partition_column" placeholder="ex: order_date" class="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+        </div>
+
+        <div class="flex justify-between pt-2">
+          <button type="button" onclick="goStep(1)" class="px-5 py-2 rounded-lg text-sm font-medium text-zinc-300 border border-zinc-700 hover:bg-zinc-800">
+            ← Anterior
+          </button>
+          <button type="button" onclick="goStep(3)" class="px-5 py-2 rounded-lg text-sm font-medium text-white" style="background:#185FA5">
+            Próximo →
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="step-panel {% if step != 3 %}hidden{% endif %}" data-panel="3">
+      <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-6">
+        <h2 class="text-sm font-semibold text-zinc-300 mb-4">Etapa 3 — Schema</h2>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm" id="schema-table">
+            <thead>
+              <tr class="text-xs text-zinc-500 border-b border-zinc-800">
+                <th class="text-left py-2 pr-3">Nome</th>
+                <th class="text-left py-2 pr-3">Tipo</th>
+                <th class="text-left py-2 pr-3">Nullable</th>
+                <th class="text-left py-2 pr-3">PII</th>
+                <th class="text-left py-2 pr-3">Descrição</th>
+                <th class="py-2"></th>
+              </tr>
+            </thead>
+            <tbody id="fields-body">
+              <tr class="field-row border-b border-zinc-800">
+                <td class="py-2 pr-2"><input name="field_names" placeholder="campo_id" class="w-32 bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded px-2 py-1.5 mono focus:outline-none focus:border-blue-500"/></td>
+                <td class="py-2 pr-2">
+                  <select name="field_types" class="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+                    {% for t in ["STRING","INTEGER","BIGINT","DECIMAL","FLOAT","BOOLEAN","DATE","TIMESTAMP","MAP","ARRAY"] %}
+                    <option>{{ t }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td class="py-2 pr-2">
+                  <select name="field_nullables" class="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+                    <option value="true">NULL</option>
+                    <option value="false">NOT NULL</option>
+                  </select>
+                </td>
+                <td class="py-2 pr-2">
+                  <select name="field_piis" class="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+                    {% for p in ["NONE","CPF","EMAIL","NAME","PHONE","IP","DATE"] %}
+                    <option>{{ p }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td class="py-2 pr-2"><input name="field_descs" placeholder="descrição..." class="w-48 bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"/></td>
+                <td class="py-2"><button type="button" onclick="removeRow(this)" class="text-zinc-600 hover:text-red-400 text-xs px-1">✕</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <button type="button" onclick="addRow()" class="mt-3 text-xs text-blue-400 hover:underline flex items-center gap-1">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          Adicionar campo
+        </button>
+
+        <div class="flex justify-between mt-6">
+          <button type="button" onclick="goStep(2)" class="px-5 py-2 rounded-lg text-sm font-medium text-zinc-300 border border-zinc-700 hover:bg-zinc-800">
+            ← Anterior
+          </button>
+          <button type="submit" class="px-6 py-2 rounded-lg text-sm font-medium text-white" style="background:#185FA5">
+            Criar Contrato
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  let currentStep = {{ step }};
+
+  function goStep(n) {
+    document.querySelectorAll('.step-panel').forEach(p => p.classList.add('hidden'));
+    document.querySelector(`.step-panel[data-panel="${n}"]`).classList.remove('hidden');
+    document.querySelectorAll('.step-dot').forEach(d => {
+      const s = parseInt(d.dataset.step);
+      if (s < n) { d.style.background='#16a34a'; d.textContent='✓'; }
+      else if (s === n) { d.style.background='#185FA5'; d.textContent=s; }
+      else { d.style.background=''; d.style.backgroundColor=''; d.className = d.className.replace(/bg-\S+/,''); d.textContent=s; }
+    });
+    currentStep = n;
+  }
+
+  function fieldRowHTML() {
+    const types = ["STRING","INTEGER","BIGINT","DECIMAL","FLOAT","BOOLEAN","DATE","TIMESTAMP","MAP","ARRAY"];
+    const piis = ["NONE","CPF","EMAIL","NAME","PHONE","IP","DATE"];
+    return `<tr class="field-row border-b border-zinc-800">
+      <td class="py-2 pr-2"><input name="field_names" placeholder="campo" class="w-32 bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded px-2 py-1.5 mono focus:outline-none focus:border-blue-500"/></td>
+      <td class="py-2 pr-2"><select name="field_types" class="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">${types.map(t=>`<option>${t}</option>`).join('')}</select></td>
+      <td class="py-2 pr-2"><select name="field_nullables" class="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"><option value="true">NULL</option><option value="false">NOT NULL</option></select></td>
+      <td class="py-2 pr-2"><select name="field_piis" class="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">${piis.map(p=>`<option>${p}</option>`).join('')}</select></td>
+      <td class="py-2 pr-2"><input name="field_descs" placeholder="descrição..." class="w-48 bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"/></td>
+      <td class="py-2"><button type="button" onclick="removeRow(this)" class="text-zinc-600 hover:text-red-400 text-xs px-1">✕</button></td>
+    </tr>`;
+  }
+
+  function addRow() {
+    document.getElementById('fields-body').insertAdjacentHTML('beforeend', fieldRowHTML());
+  }
+
+  function removeRow(btn) {
+    btn.closest('tr').remove();
+  }
+</script>
+{% endblock %}

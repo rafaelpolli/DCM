@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>JaguarData — Entrar</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body { font-family: 'Inter', sans-serif; background: #FEFCF8; color: #0f0f0f; }
+
+    #canvas {
+      position: fixed; inset: 0;
+      width: 100vw; height: 100vh;
+      pointer-events: none; z-index: 0;
+    }
+
+    /* Flash overlay for supernova effect */
+    #flash {
+      position: fixed; inset: 0; z-index: 20;
+      background: #FF6200;
+      opacity: 0; pointer-events: none;
+      transition: none;
+    }
+
+    /* Login wrapper */
+    #wrap {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0; transform: translateY(18px) scale(0.97);
+      transition: opacity .8s cubic-bezier(.16,1,.3,1), transform .8s cubic-bezier(.16,1,.3,1);
+    }
+    #wrap.in  { opacity: 1; transform: none; }
+    #wrap.out { opacity: 0; transform: scale(1.04); transition: opacity .5s ease, transform .5s ease; }
+
+    /* Card */
+    .card {
+      width: 420px;
+      background: #fff;
+      border-radius: 22px;
+      padding: 40px 38px 34px;
+      position: relative;
+      box-shadow: 0 2px 4px rgba(0,0,0,.04),
+                  0 8px 24px rgba(0,0,0,.07),
+                  0 32px 64px rgba(255,98,0,.06);
+      overflow: hidden;
+    }
+    /* Animated gradient stripe */
+    .card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, #FF6200, #FFB347, #185FA5, #FF6200);
+      background-size: 300% 100%;
+      animation: stripe 5s linear infinite;
+    }
+    @keyframes stripe {
+      0%   { background-position: 0% 0%; }
+      100% { background-position: 300% 0%; }
+    }
+
+    /* Logo row */
+    .logo-row { display: flex; align-items: center; gap: 14px; margin-bottom: 30px; }
+    .logo-img  { width: 54px; height: 54px; object-fit: contain; }
+    .brand-name {
+      font-size: 22px; font-weight: 800; letter-spacing: -0.6px;
+      background: linear-gradient(135deg, #FF6200, #cc4e00);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+    .brand-sub { font-size: 11px; color: #9ca3af; letter-spacing: .05em; text-transform: uppercase; margin-top: 2px; }
+
+    /* Divider */
+    .divider { height: 1px; background: #f0ede8; margin-bottom: 24px; }
+
+    /* Heading */
+    .card-heading { font-size: 15px; font-weight: 600; color: #1a1a1a; margin-bottom: 20px; }
+
+    /* Field */
+    .field { margin-bottom: 15px; }
+    .field label { display: block; font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 6px; }
+    .field input {
+      width: 100%; padding: 11px 14px; border-radius: 11px;
+      border: 1.5px solid #e8e4de; background: #FAFAF8;
+      font-size: 14px; color: #0f0f0f;
+      font-family: 'IBM Plex Mono', monospace;
+      outline: none; transition: border-color .18s, box-shadow .18s, background .18s;
+    }
+    .field input:focus {
+      border-color: #FF6200;
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(255,98,0,.1);
+    }
+    .field input::placeholder { color: #d1cec9; }
+
+    /* Error */
+    #err { font-size: 12px; color: #dc2626; text-align: center; min-height: 16px; margin-bottom: 6px; opacity: 0; transition: opacity .2s; }
+    #err.show { opacity: 1; }
+
+    /* Button */
+    #btn {
+      width: 100%; padding: 13px; border-radius: 12px; border: none;
+      background: linear-gradient(135deg, #FF6200, #E05200);
+      color: #fff; font-size: 14px; font-weight: 700; cursor: pointer;
+      letter-spacing: .02em; position: relative; overflow: hidden;
+      transition: filter .15s, transform .1s, box-shadow .2s;
+      box-shadow: 0 4px 14px rgba(255,98,0,.25);
+    }
+    #btn::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.18) 50%, transparent 70%);
+      transform: translateX(-100%);
+      transition: transform .45s ease;
+    }
+    #btn:hover:not(:disabled)::after { transform: translateX(100%); }
+    #btn:hover:not(:disabled) { filter: brightness(1.08); box-shadow: 0 6px 22px rgba(255,98,0,.35); }
+    #btn:active:not(:disabled) { transform: scale(.98); }
+    #btn:disabled { opacity: .6; cursor: not-allowed; }
+
+    /* Quick access */
+    .qa { margin-top: 22px; padding-top: 18px; border-top: 1px solid #f0ede8; }
+    .qa-label { font-size: 10px; color: #c4c0bb; text-align: center; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 10px; }
+    .qa-chips { display: flex; gap: 7px; justify-content: center; flex-wrap: wrap; }
+    .chip {
+      font-size: 11px; color: #6b7280; border: 1.5px solid #e8e4de;
+      border-radius: 99px; padding: 4px 13px; cursor: pointer;
+      font-family: 'IBM Plex Mono', monospace; transition: all .15s;
+      background: #fff;
+    }
+    .chip:hover { border-color: #FF6200; color: #FF6200; background: #fff8f4; transform: translateY(-1px); box-shadow: 0 2px 8px rgba(255,98,0,.12); }
+
+    /* Dot loader */
+    @keyframes db { 0%,80%,100%{transform:scale(0);opacity:.3} 40%{transform:scale(1);opacity:1} }
+    .dot { display:inline-block; width:5px; height:5px; border-radius:50%; background:#fff; margin:0 2px; animation: db 1.2s infinite ease-in-out both; }
+    .dot:nth-child(1){animation-delay:-.32s} .dot:nth-child(2){animation-delay:-.16s}
+  </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="flash"></div>
+
+<div id="wrap">
+  <div class="card">
+    <div class="logo-row">
+      <img src="/static/images/logo.png" alt="JaguarData" class="logo-img"/>
+      <div>
+        <div class="brand-name">JaguarData</div>
+        <div class="brand-sub">Data Contracts Platform</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="card-heading">Acesse sua conta</div>
+    <form id="form" autocomplete="off">
+      <div class="field">
+        <label>Usuário</label>
+        <input id="user" name="username" type="text" placeholder="ex: ana.silva" autocomplete="off"/>
+      </div>
+      <div class="field">
+        <label>Senha <span style="font-weight:400;color:#d1cec9">(demo — qualquer)</span></label>
+        <input id="pass" name="password" type="password" placeholder="••••••••" autocomplete="off"/>
+      </div>
+      <div id="err"></div>
+      <button id="btn" type="submit"><span id="btxt">Entrar →</span></button>
+    </form>
+    <div class="qa">
+      <div class="qa-label">Acesso rápido</div>
+      <div class="qa-chips">
+        <div class="chip" onclick="quick('ana.silva')">Ana Silva</div>
+        <div class="chip" onclick="quick('carlos.mendes')">Carlos Mendes</div>
+        <div class="chip" onclick="quick('beatriz.lima')">Beatriz Lima</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  CANVAS — Flow Field Particle Ribbons
+// ═══════════════════════════════════════════════════════════
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+let W, H, cols, rows, CELL = 22;
+let field = [];
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cols = Math.ceil(W / CELL) + 1;
+  rows = Math.ceil(H / CELL) + 1;
+}
+resize();
+window.addEventListener('resize', () => { resize(); initParticles(); });
+
+// ── Flow field (layered sine = cheap Perlin) ──────────────
+function buildField(t) {
+  field = [];
+  const T = t * 0.001;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const nx = c / cols, ny = r / rows;
+      const a =
+        Math.sin(nx * 4.2 + T * 0.28) * Math.PI * 1.4 +
+        Math.cos(ny * 3.5 - T * 0.32) * Math.PI       +
+        Math.sin((nx + ny) * 5.1 - T * 0.19) * Math.PI * 0.6 +
+        Math.cos((nx - ny) * 2.8 + T * 0.14) * Math.PI * 0.4;
+      field.push(a);
+    }
+  }
+}
+
+// ── Particle ──────────────────────────────────────────────
+const TOTAL = 200;
+let particles = [];
+
+class P {
+  constructor(init) {
+    this.reset(init ? Math.random() * 300 : 0);
+  }
+  reset(life = 0) {
+    this.x  = Math.random() * W;
+    this.y  = Math.random() * H;
+    this.px = this.x;
+    this.py = this.y;
+    this.life = life;
+    this.maxL = 200 + Math.random() * 150;
+    this.spd  = 0.7 + Math.random() * 1.1;
+    this.sz   = 0.5 + Math.random() * 1.5;
+    this.orange = Math.random() > 0.44;
+    this.vx = 0; this.vy = 0; // for success mode
+  }
+  step(mode, successT) {
+    this.px = this.x; this.py = this.y;
+    if (mode === 'implode') {
+      const dt = performance.now() - successT;
+      const pull = Math.min(1, dt / 380) * 5;
+      const dx = W/2 - this.x, dy = H/2 - this.y;
+      const d  = Math.sqrt(dx*dx + dy*dy) || 1;
+      this.vx = this.vx * 0.88 + (dx/d) * pull * 0.18;
+      this.vy = this.vy * 0.88 + (dy/d) * pull * 0.18;
+      this.x += this.vx; this.y += this.vy;
+    } else if (mode === 'explode') {
+      const dx = this.x - W/2, dy = this.y - H/2;
+      const d  = Math.sqrt(dx*dx + dy*dy) || 1;
+      const force = 6 + Math.random() * 4;
+      this.vx = this.vx * 0.9 + (dx/d) * force * 0.15;
+      this.vy = this.vy * 0.9 + (dy/d) * force * 0.15;
+      this.x += this.vx; this.y += this.vy;
+    } else {
+      // Normal flow field
+      const ci = Math.floor(this.x / CELL);
+      const ri = Math.floor(this.y / CELL);
+      const idx = ri * cols + ci;
+      const ang = field[idx] ?? 0;
+      this.x += Math.cos(ang) * this.spd;
+      this.y += Math.sin(ang) * this.spd;
+      this.life++;
+    }
+
+    const out = this.x < -10 || this.x > W+10 || this.y < -10 || this.y > H+10;
+    if (out || this.life > this.maxL) this.reset();
+  }
+  draw(mode) {
+    const lt = this.life / this.maxL;
+    const fade = mode === 'normal' || mode === 'intro'
+      ? (lt < 0.12 ? lt/0.12 : lt > 0.88 ? (1-lt)/0.12 : 1) : 1;
+    const baseA = this.orange ? 0.55 : 0.42;
+    ctx.globalAlpha = fade * baseA;
+    ctx.strokeStyle = this.orange ? '#FF6200' : '#185FA5';
+    ctx.lineWidth   = this.sz;
+    ctx.beginPath();
+    ctx.moveTo(this.px, this.py);
+    ctx.lineTo(this.x,  this.y);
+    ctx.stroke();
+  }
+}
+
+function initParticles() {
+  particles = Array.from({length: TOTAL}, (_, i) => new P(true));
+}
+initParticles();
+
+// ── Background wide ribbons ───────────────────────────────
+function drawRibbons(t) {
+  const T = t * 0.0003;
+  const ribbons = [
+    { y0: H * 0.25, cy: H * 0.15, amp: 80,  col: 'rgba(255,98,0,0.025)',  w: 120 },
+    { y0: H * 0.60, cy: H * 0.70, amp: 100, col: 'rgba(24,95,165,0.02)',  w: 160 },
+    { y0: H * 0.80, cy: H * 0.85, amp: 60,  col: 'rgba(255,98,0,0.018)', w: 100 },
+  ];
+  ribbons.forEach(({ y0, cy, amp, col, w }) => {
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = col;
+    ctx.beginPath();
+    ctx.moveTo(0, y0 + Math.sin(T) * amp);
+    ctx.bezierCurveTo(
+      W*0.25, cy + Math.cos(T*1.3) * amp * 0.8,
+      W*0.75, cy + Math.sin(T*0.9) * amp,
+      W,      y0 + Math.cos(T*1.1) * amp * 0.6
+    );
+    ctx.lineTo(W, y0 + w + Math.cos(T*1.1)*amp*0.6);
+    ctx.bezierCurveTo(
+      W*0.75, cy + w + Math.sin(T*0.9)*amp,
+      W*0.25, cy + w + Math.cos(T*1.3)*amp*0.8,
+      0,      y0 + w + Math.sin(T)*amp
+    );
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+// ── Bloom overlay ─────────────────────────────────────────
+function drawBloom(progress) {
+  const maxR = Math.sqrt(W*W + H*H) * 0.56;
+  const r    = easeOutQuint(Math.min(1, progress)) * maxR;
+  const grd  = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, r);
+  grd.addColorStop(0,   `rgba(255,98,0,${0.88 * Math.min(1, progress * 1.5)})`);
+  grd.addColorStop(0.55,`rgba(255,130,40,${0.6 * Math.min(1, progress)})`);
+  grd.addColorStop(1,   'rgba(255,98,0,0)');
+  ctx.save(); ctx.globalAlpha = 1;
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+// ── Easing ────────────────────────────────────────────────
+const easeOutQuint = t => 1 - Math.pow(1-t, 5);
+const easeInQuad   = t => t * t;
+
+// ── State machine ─────────────────────────────────────────
+let mode      = 'intro'; // intro | normal | implode | flash | explode | done
+let startT    = null;
+let successT  = null;
+let cardShown = false;
+
+const wrap  = document.getElementById('wrap');
+const flash = document.getElementById('flash');
+
+function frame(now) {
+  if (mode === 'done') return;
+  requestAnimationFrame(frame);
+  if (!startT) startT = now;
+  const elapsed = now - startT;
+
+  // Background
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#FEFCF8';
+  ctx.fillRect(0, 0, W, H);
+
+  buildField(now);
+  drawRibbons(now);
+
+  // Show card
+  if (!cardShown && elapsed > 750) { cardShown = true; wrap.classList.add('in'); }
+  if (elapsed > 1400 && mode === 'intro') mode = 'normal';
+
+  if (mode === 'implode') {
+    const dt = now - successT;
+    if (dt >= 380) {
+      mode = 'flash';
+      // Trigger white-orange flash
+      flash.style.transition = 'none';
+      flash.style.opacity    = '1';
+      setTimeout(() => {
+        flash.style.transition = 'opacity .25s ease';
+        flash.style.opacity    = '0';
+        mode = 'explode';
+        successT = performance.now();
+      }, 120);
+    }
+    particles.forEach(p => { p.step('implode', successT); p.draw('implode'); });
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  if (mode === 'explode') {
+    const dt  = now - successT;
+    const pct = Math.min(1, dt / 700);
+    particles.forEach(p => { p.step('explode', successT); p.draw('explode'); });
+    drawBloom(pct);
+    if (dt >= 820) { mode = 'done'; window.location.href = '/'; }
+    ctx.globalAlpha = 1;
+    return;
+  }
+
+  // Normal / intro
+  particles.forEach(p => { p.step('normal'); p.draw('normal'); });
+  ctx.globalAlpha = 1;
+}
+requestAnimationFrame(frame);
+
+// ═══════════════════════════════════════════════════════════
+//  LOGIN FORM
+// ═══════════════════════════════════════════════════════════
+const form = document.getElementById('form');
+const btn  = document.getElementById('btn');
+const btxt = document.getElementById('btxt');
+const err  = document.getElementById('err');
+
+function setErr(msg) {
+  err.textContent = msg; err.classList.add('show');
+  btn.disabled = false;
+  btxt.textContent = 'Entrar →';
+}
+
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+  err.classList.remove('show');
+  btn.disabled = true;
+  btxt.innerHTML = '<span class="dot"></span><span class="dot"></span><span class="dot"></span>';
+
+  try {
+    const res  = await fetch('/login', { method:'POST', body: new FormData(form) });
+    const data = await res.json();
+    if (data.ok) {
+      wrap.classList.add('out');
+      mode = 'implode';
+      successT = performance.now();
+    } else {
+      setErr(data.message || 'Usuário não encontrado');
+    }
+  } catch { setErr('Erro de conexão.'); }
+});
+
+function quick(u) {
+  document.getElementById('user').value = u;
+  document.getElementById('pass').value = 'demo';
+  setTimeout(() => form.dispatchEvent(new Event('submit', {cancelable:true, bubbles:true})), 60);
+}
+</script>
+</body>
+</html>

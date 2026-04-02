@@ -1,0 +1,53 @@
+{% if contracts %}
+<div class="card overflow-hidden">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-100 bg-gray-50/60">
+        <th class="text-left px-6 py-3 text-xs font-semibold text-gray-400 uppercase tracking-widest">Nome</th>
+        <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-widest">Layer</th>
+        <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-widest">Domínio</th>
+        <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-widest">Versão</th>
+        <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-widest">Status</th>
+        <th class="text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Owner</th>
+        <th class="px-6 py-3"></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in contracts %}
+      {% set lc = {"RAW":("#6b7280","#F3F4F6"),"BRONZE":("#c2713a","#FFF7ED"),"SILVER":("#64748b","#F1F5F9"),"GOLD":("#ca8a04","#FEFCE8")} %}
+      {% set sc = {"DRAFT":("#9ca3af","#F9FAFB"),"PENDING":("#FF6200","#FFF7ED"),"APPROVED":("#16a34a","#F0FDF4"),"REJECTED":("#dc2626","#FEF2F2"),"DEPRECATED":("#9ca3af","#F9FAFB")} %}
+      {% set lclr, lbg = lc.get(c.location.layer, ("#9ca3af","#F9FAFB")) %}
+      {% set sclr, sbg = sc.get(c.status, ("#9ca3af","#F9FAFB")) %}
+      <tr class="trow border-b border-gray-50 cursor-pointer transition-colors"
+        onclick="location.href='/contracts/{{ c.id }}'">
+        <td class="px-6 py-4">
+          <span class="mono font-semibold text-gray-900 text-sm">{{ c.name }}</span>
+        </td>
+        <td class="px-4 py-4">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold mono"
+            style="color:{{ lclr }};background:{{ lbg }}">{{ c.location.layer }}</span>
+        </td>
+        <td class="px-4 py-4 text-gray-500 text-xs">{{ c.domain }}</td>
+        <td class="px-4 py-4 text-gray-400 mono text-xs">{{ c.version }}</td>
+        <td class="px-4 py-4">
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold mono"
+            style="color:{{ sclr }};background:{{ sbg }}">{{ c.status }}</span>
+        </td>
+        <td class="px-4 py-4 text-gray-400 mono text-xs hidden lg:table-cell">{{ c.owner }}</td>
+        <td class="px-6 py-4 text-right">
+          <span class="text-xs text-gray-300 hover:text-orange-500 transition-colors font-semibold">Ver →</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card flex flex-col items-center justify-center py-20">
+  <svg class="w-10 h-10 mb-4 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+  </svg>
+  <p class="text-sm font-semibold text-gray-400 mb-1">Nenhum contrato encontrado</p>
+  <p class="text-xs text-gray-300">Ajuste os filtros ou crie um novo</p>
+</div>
+{% endif %}

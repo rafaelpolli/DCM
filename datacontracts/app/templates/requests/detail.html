@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %} — {{ req.title }}{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-5">
+
+  <!-- Breadcrumb -->
+  <div class="flex items-center gap-2 text-xs text-gray-400">
+    <a href="/requests" class="hover:text-orange-500 transition-colors">Solicitações</a>
+    <span>/</span>
+    <span class="text-gray-600 mono">{{ req.id }}</span>
+  </div>
+
+  <!-- Header -->
+  <div class="card p-5">
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex-1">
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          {% set sc = {"OPEN":("#185FA5","#EFF6FF"),"APPROVED":("#16a34a","#F0FDF4"),"REJECTED":("#dc2626","#FEF2F2"),"IN_REVIEW":("#7c3aed","#F5F3FF")} %}
+          {% set tc = {"SCHEMA_CHANGE":("#7c3aed","#F5F3FF"),"SLA_CHANGE":("#0d9488","#F0FDFA"),"CREATE":("#185FA5","#EFF6FF"),"DEPRECATE":("#9ca3af","#F9FAFB")} %}
+          {% set sc2,sbg = sc.get(req.status, ("#9ca3af","#F9FAFB")) %}
+          {% set tc2,tbg = tc.get(req.type,   ("#9ca3af","#F9FAFB")) %}
+          <span id="status-badge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold mono"
+            style="color:{{ sc2 }};background:{{ sbg }}">{{ req.status }}</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold mono"
+            style="color:{{ tc2 }};background:{{ tbg }}">{{ req.type }}</span>
+        </div>
+        <h1 class="text-xl font-bold text-gray-900">{{ req.title }}</h1>
+        <p class="text-sm text-gray-500 mt-1">{{ req.description }}</p>
+        <div class="flex flex-wrap items-center gap-3 mt-3 text-xs text-gray-400">
+          <span>Solicitante: <span class="text-gray-700 font-medium">{{ req.requester_name }}</span></span>
+          <span>·</span>
+          <span>Contrato: <a href="/contracts/{{ req.contract_id }}" class="text-orange-500 hover:underline mono font-medium">{{ req.contract_name }}</a></span>
+          <span>·</span>
+          <span class="mono">{{ req.created_at }}</span>
+        </div>
+      </div>
+
+      <!-- Admin actions -->
+      {% if role == 'admin' and req.status == 'OPEN' %}
+      <div class="flex flex-col gap-2 shrink-0" id="action-area">
+        <button hx-post="/requests/{{ req.id }}/approve" hx-target="#action-area" hx-swap="outerHTML"
+          class="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-green-600 hover:bg-green-500 transition-colors">
+          ✓ Aprovar
+        </button>
+        <button onclick="document.getElementById('reject-form').classList.toggle('hidden')"
+          class="px-4 py-2 rounded-lg text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-50 transition-colors">
+          ✕ Rejeitar
+        </button>
+        <div id="reject-form" class="hidden w-64">
+          <form hx-post="/requests/{{ req.id }}/reject" hx-target="#action-area" hx-swap="outerHTML">
+            <textarea name="justification" rows="3" placeholder="Justificativa..."
+              class="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-red-400 resize-none mb-2"></textarea>
+            <button type="submit" class="w-full px-3 py-2 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-500">Confirmar Rejeição</button>
+          </form>
+        </div>
+      </div>
+      {% elif req.status in ('APPROVED', 'REJECTED') %}
+      <div class="text-xs text-gray-400 italic">
+        {% if req.status == 'APPROVED' %}Aprovado em {{ req.updated_at }}{% else %}Rejeitado em {{ req.updated_at }}{% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Diff visual -->
+  {% if req.diff and req.diff.changes %}
+  <div class="card overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+      <h2 class="text-sm font-bold text-gray-800">Diff Visual</h2>
+      <div class="flex items-center gap-2 text-xs text-gray-400 mono">
+        {% if req.diff.version_from %}<span>v{{ req.diff.version_from }}</span><span>→</span>{% endif %}
+        <span>v{{ req.diff.version_to }}</span>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 divide-x divide-gray-100 text-xs mono">
+      <div class="px-5 py-2.5 bg-gray-50 text-gray-500 font-semibold">
+        Versão atual {% if req.diff.version_from %}({{ req.diff.version_from }}){% endif %}
+      </div>
+      <div class="px-5 py-2.5 bg-gray-50 text-gray-500 font-semibold">
+        Versão proposta ({{ req.diff.version_to }})
+      </div>
+      {% for change in req.diff.changes %}
+        {% if change.op == "remove" %}
+        <div class="px-5 py-2.5 bg-red-50 text-red-700 flex items-center gap-2 border-t border-red-100">
+          <span class="text-red-500 font-bold text-sm">−</span><span>{{ change.field }} {{ change.old }}</span>
+        </div>
+        <div class="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">campo removido</div>
+        {% elif change.op == "add" %}
+        <div class="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">campo adicionado</div>
+        <div class="px-5 py-2.5 bg-green-50 text-green-700 flex items-center gap-2 border-t border-green-100">
+          <span class="text-green-500 font-bold text-sm">+</span><span>{{ change.field }} {{ change.new }}</span>
+        </div>
+        {% elif change.op == "modify" %}
+        <div class="px-5 py-2.5 bg-amber-50 text-amber-700 flex items-center gap-2 border-t border-amber-100">
+          <span class="text-amber-500 font-bold text-sm">~</span><span>{{ change.field }} = {{ change.old }}</span>
+        </div>
+        <div class="px-5 py-2.5 bg-amber-50 text-amber-800 flex items-center gap-2 border-t border-amber-100">
+          <span class="text-amber-500 font-bold text-sm">~</span><span>{{ change.field }} = {{ change.new }}</span>
+        </div>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <div class="px-5 py-3 border-t border-gray-100 bg-gray-50/50">
+      <p class="text-xs text-gray-400">
+        {% set removes = req.diff.changes | selectattr("op","eq","remove") | list %}
+        {% set adds    = req.diff.changes | selectattr("op","eq","add")    | list %}
+        {% set mods    = req.diff.changes | selectattr("op","eq","modify") | list %}
+        {% if removes %}<span class="text-red-500 font-semibold">{{ removes|length }} campo(s) removido(s)</span>{% endif %}
+        {% if removes and (adds or mods) %} · {% endif %}
+        {% if adds %}<span class="text-green-600 font-semibold">{{ adds|length }} campo(s) adicionado(s)</span>{% endif %}
+        {% if adds and mods %} · {% endif %}
+        {% if mods %}<span class="text-amber-600 font-semibold">{{ mods|length }} propriedade(s) modificada(s)</span>{% endif %}
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Comments -->
+  <div class="card overflow-hidden">
+    <div class="px-5 py-4 border-b border-gray-100">
+      <h2 class="text-sm font-bold text-gray-800">Comentários</h2>
+    </div>
+    <div id="comments-section">{% include "requests/_comments.html" %}</div>
+    {% if role in ('creator','admin') %}
+    <div class="px-5 py-4 border-t border-gray-100 bg-gray-50/30">
+      <form hx-post="/requests/{{ req.id }}/comment"
+            hx-target="#comments-section" hx-swap="innerHTML"
+            hx-on::after-request="this.reset()">
+        <div class="flex gap-3">
+          <div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 mt-1"
+            style="background:linear-gradient(135deg,#FF6200,#E05200)">{{ current_user.name[0] }}</div>
+          <div class="flex-1 flex gap-2">
+            <input name="text" placeholder="Adicionar comentário..." required
+              class="flex-1 bg-white border border-gray-200 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"/>
+            <button type="submit"
+              class="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110"
+              style="background:linear-gradient(135deg,#FF6200,#E05200)">Enviar</button>
+          </div>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+{% block scripts %}<script>{% if toast %}showToast("{{ toast }}"){% endif %}</script>{% endblock %}

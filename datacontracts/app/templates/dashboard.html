@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %} — Dashboard{% endblock %}
+{% block content %}
+<div class="space-y-7">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight text-gray-900">Dashboard</h1>
+      <p class="text-sm text-gray-400 mt-0.5">Visão geral da plataforma de contratos</p>
+    </div>
+    {% if role in ('creator','admin') %}
+    <a href="/contracts/new" class="btn-primary">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+      </svg>
+      Novo Contrato
+    </a>
+    {% endif %}
+  </div>
+
+  <!-- Metrics -->
+  <div class="grid grid-cols-2 xl:grid-cols-4 gap-4">
+    {% set metrics = [
+      ("Total de Contratos",     stats.total,               "#185FA5", "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"),
+      ("Pendentes de Aprovação", stats.pending,             "#FF6200", "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"),
+      ("Aprovados este mês",     stats.approved_this_month, "#16a34a", "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"),
+      ("Campos com PII",         stats.pii_fields,          "#dc2626", "M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"),
+    ] %}
+    {% for label, value, color, path in metrics %}
+    <div class="card metric-card p-5">
+      <div class="flex items-start justify-between mb-4">
+        <span class="text-xs font-semibold text-gray-400 uppercase tracking-widest">{{ label }}</span>
+        <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+          style="background:{{ color }}12">
+          <svg class="w-4 h-4" fill="none" stroke="{{ color }}" stroke-width="1.8" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="{{ path }}"/>
+          </svg>
+        </div>
+      </div>
+      <p class="text-4xl font-extrabold tracking-tight" style="color:{{ color }}">{{ value }}</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Bottom row -->
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+    <!-- Recent activity -->
+    <div class="xl:col-span-2 card overflow-hidden">
+      <div class="px-6 py-4 flex items-center justify-between border-b border-gray-100">
+        <h2 class="text-sm font-bold text-gray-800">Atividade Recente</h2>
+        <a href="/requests" class="text-xs text-gray-400 hover:text-orange-500 transition-colors flex items-center gap-1 font-medium">
+          Ver todas
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+          </svg>
+        </a>
+      </div>
+      {% if recent %}
+      <table class="w-full text-sm">
+        <tbody>
+          {% for r in recent %}
+          {% set sc = {"OPEN":("#185FA5","#EFF6FF"),"APPROVED":("#16a34a","#F0FDF4"),"REJECTED":("#dc2626","#FEF2F2"),"IN_REVIEW":("#7c3aed","#F5F3FF")} %}
+          {% set c,bg = sc.get(r.status, ("#9ca3af","#F9FAFB")) %}
+          <tr class="trow border-b border-gray-50 cursor-pointer" onclick="location.href='/requests/{{ r.id }}'">
+            <td class="px-6 py-3.5">
+              <p class="text-gray-800 font-medium text-sm leading-snug">{{ r.title }}</p>
+              <p class="text-gray-400 text-xs mono mt-0.5">{{ r.contract_name }}</p>
+            </td>
+            <td class="px-4 py-3.5 text-right whitespace-nowrap">
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold mono"
+                style="color:{{ c }};background:{{ bg }}">{{ r.status }}</span>
+            </td>
+            <td class="pr-6 py-3.5 text-right text-xs text-gray-400 mono whitespace-nowrap">{{ r.updated_at }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="flex flex-col items-center justify-center py-14 text-gray-300">
+        <svg class="w-8 h-8 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+        </svg>
+        <p class="text-sm text-gray-400">Nenhuma atividade recente</p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Layer distribution -->
+    <div class="card p-6">
+      <h2 class="text-sm font-bold text-gray-800 mb-6">Distribuição por Layer</h2>
+      <div class="space-y-5">
+        {% set lc = {"RAW":("#6b7280","#F3F4F6"),"BRONZE":("#c2713a","#FFF7ED"),"SILVER":("#64748b","#F1F5F9"),"GOLD":("#ca8a04","#FEFCE8")} %}
+        {% for layer in ["RAW","BRONZE","SILVER","GOLD"] %}
+        {% set count = stats.by_layer.get(layer, 0) %}
+        {% set pct = ((count / stats.total) * 100) | int if stats.total > 0 else 0 %}
+        {% set c, bg = lc[layer] %}
+        <div>
+          <div class="flex justify-between items-center mb-2">
+            <span class="text-xs font-bold mono px-2 py-0.5 rounded-md" style="color:{{ c }};background:{{ bg }}">{{ layer }}</span>
+            <span class="text-xs text-gray-400 mono">{{ count }} / {{ stats.total }}</span>
+          </div>
+          <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-700"
+              style="width:{{ pct }}%;background:{{ c }}"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
