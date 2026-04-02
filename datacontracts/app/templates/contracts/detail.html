@@ -5,10 +5,10 @@
 <div class="space-y-6">
 
   <!-- Breadcrumb -->
-  <div class="flex items-center gap-2 text-xs text-zinc-600">
-    <a href="/contracts" class="hover:text-zinc-400 transition-colors">Catálogo</a>
+  <div class="flex items-center gap-2 text-xs text-gray-500">
+    <a href="/contracts" class="hover:text-gray-800 transition-colors">Catálogo</a>
     <span>/</span>
-    <span class="mono text-zinc-400">{{ contract.name }}</span>
+    <span class="mono text-gray-700">{{ contract.name }}</span>
   </div>
 
   <!-- Header card -->
@@ -16,39 +16,39 @@
     <div class="flex items-start justify-between gap-6">
       <div class="flex-1 min-w-0">
         <div class="flex flex-wrap items-center gap-2.5 mb-2">
-          <h1 class="text-xl font-semibold mono text-zinc-50">{{ contract.name }}</h1>
-          {% set cfg = {"DRAFT":("#71717a","#71717a18"),"PENDING":("#d97706","#d9770618"),"APPROVED":("#16a34a","#16a34a18"),"REJECTED":("#dc2626","#dc262618"),"DEPRECATED":("#52525b","#52525b18")} %}
-          {% set c,bg = cfg.get(contract.status, ("#71717a","#71717a18")) %}
+          <h1 class="text-xl font-semibold mono text-gray-900">{{ contract.name }}</h1>
+          {% set cfg = {"DRAFT":("#71717a","#f4f4f5"),"PENDING":("#d97706","#fffbeb"),"APPROVED":("#16a34a","#f0fdf4"),"REJECTED":("#dc2626","#fef2f2"),"DEPRECATED":("#52525b","#f4f4f5")} %}
+          {% set c,bg = cfg.get(contract.status, ("#71717a","#f4f4f5")) %}
           <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold mono"
             style="color:{{ c }};background:{{ bg }}">{{ contract.status }}</span>
-          <span class="text-xs text-zinc-600 mono">v{{ contract.version }}</span>
-          <span class="text-xs text-zinc-700 mono">· {{ contract.environment }}</span>
+          <span class="text-xs text-gray-500 mono">v{{ contract.version }}</span>
+          <span class="text-xs text-gray-400 mono">· {{ contract.environment }}</span>
         </div>
-        <p class="text-sm text-zinc-400 leading-relaxed">{{ contract.description }}</p>
+        <p class="text-sm text-gray-600 leading-relaxed">{{ contract.description }}</p>
         <div class="flex flex-wrap gap-2 mt-3">
           {% for tag in contract.tags %}
-          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs mono text-zinc-500 border border-zinc-800 bg-zinc-900/50">#{{ tag }}</span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs mono text-gray-500 border border-gray-200 bg-gray-50">#{{ tag }}</span>
           {% endfor %}
         </div>
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {% if role in ('creator','admin') %}
-        <a href="/contracts/new" class="px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-zinc-200 transition-colors">
+        <a href="/contracts/new" class="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 transition-colors">
           + Solicitação
         </a>
         {% endif %}
         <div class="relative">
           <button onclick="this.nextElementSibling.classList.toggle('hidden')"
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-zinc-400 border border-zinc-800 hover:border-zinc-700 hover:text-zinc-200 transition-colors">
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 transition-colors">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
             </svg>
             Exportar
           </button>
-          <div class="hidden absolute right-0 top-9 card shadow-2xl z-10 w-28 py-1 overflow-hidden">
+          <div class="hidden absolute right-0 top-9 card shadow-lg z-10 w-28 py-1 overflow-hidden border border-gray-200">
             {% for fmt in ["json","yaml","ddl"] %}
             <a href="/contracts/{{ contract.id }}/export?format={{ fmt }}"
-              class="block px-4 py-2 text-xs text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 mono uppercase transition-colors">{{ fmt }}</a>
+              class="block px-4 py-2 text-xs text-gray-600 hover:bg-gray-50 hover:text-gray-900 mono uppercase transition-colors">{{ fmt }}</a>
             {% endfor %}
           </div>
         </div>
@@ -57,7 +57,7 @@
   </div>
 
   <!-- Tabs -->
-  <div class="border-b border-zinc-800/60">
+  <div class="border-b border-gray-200">
     <nav class="flex gap-5 -mb-px">
       {% set tabs = [("overview","Visão Geral"),("schema","Schema"),("location","Localização"),("partitioning","Particionamento"),("history","Histórico"),("requests","Solicitações")] %}
       {% for tid, tlabel in tabs %}

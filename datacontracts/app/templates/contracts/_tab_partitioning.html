@@ -1,6 +1,6 @@
 <div class="max-w-lg">
-  <div class="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
-    <h3 class="text-xs font-semibold text-zinc-500 uppercase tracking-wider">Particionamento</h3>
+  <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-4 shadow-sm">
+    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Particionamento</h3>
     {% set part = contract.partitioning %}
     {% set items = [
       ("Estratégia", part.strategy),
@@ -10,8 +10,8 @@
     ] %}
     {% for label, value in items %}
     <div>
-      <div class="text-xs text-zinc-500 mb-1">{{ label }}</div>
-      <div class="bg-zinc-800 rounded px-3 py-2 mono text-sm text-zinc-200">{{ value }}</div>
+      <div class="text-xs text-gray-500 mb-1">{{ label }}</div>
+      <div class="bg-gray-50 border border-gray-100 rounded px-3 py-2 mono text-sm text-gray-800">{{ value }}</div>
     </div>
     {% endfor %}
   </div>
