@@ -1,0 +1,103 @@
+{% set dq = contract.get("data_quality") or [] %}
+
+<div class="space-y-5">
+
+  <!-- Summary -->
+  <div class="grid grid-cols-3 gap-4">
+    {% set critical_count = dq | selectattr("severity", "equalto", "CRITICAL") | list | length %}
+    {% set alert_count    = dq | selectattr("severity", "equalto", "ALERT")    | list | length %}
+    <div class="card p-4 text-center">
+      <p class="text-2xl font-bold text-gray-900">{{ dq | length }}</p>
+      <p class="text-xs text-gray-500 mt-1">Total de regras</p>
+    </div>
+    <div class="card p-4 text-center">
+      <p class="text-2xl font-bold" style="color:#dc2626">{{ critical_count }}</p>
+      <p class="text-xs text-gray-500 mt-1">Crítico</p>
+    </div>
+    <div class="card p-4 text-center">
+      <p class="text-2xl font-bold" style="color:#d97706">{{ alert_count }}</p>
+      <p class="text-xs text-gray-500 mt-1">Alerta</p>
+    </div>
+  </div>
+
+  {% if not dq %}
+  <div class="card p-10 text-center text-gray-400">
+    <svg class="w-10 h-10 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <p class="text-sm">Nenhuma regra de Data Quality definida.</p>
+    <p class="text-xs mt-1">Crie um novo contrato para adicionar regras SodaCore.</p>
+  </div>
+
+  {% else %}
+  <div class="card overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-xs text-gray-400 border-b border-gray-100 bg-gray-50/50">
+            <th class="text-left px-4 py-3 font-medium">Categoria</th>
+            <th class="text-left px-4 py-3 font-medium">Check</th>
+            <th class="text-left px-4 py-3 font-medium">Coluna</th>
+            <th class="text-left px-4 py-3 font-medium">Parâmetros</th>
+            <th class="text-left px-4 py-3 font-medium">Severidade</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for rule in dq %}
+          <tr class="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
+            <td class="px-4 py-3 text-gray-600 text-xs">{{ rule.category }}</td>
+            <td class="px-4 py-3 mono text-gray-800 text-xs">{{ rule.check }}</td>
+            <td class="px-4 py-3 mono text-gray-500 text-xs">{{ rule.column or "—" }}</td>
+            <td class="px-4 py-3 text-xs text-gray-500">
+              {% if rule.params %}
+                {% for k, v in rule.params.items() if v %}
+                  <span class="inline-flex items-center gap-1 mr-2">
+                    <span class="text-gray-400">{{ k }}:</span>
+                    <span class="mono text-gray-700">{{ v }}</span>
+                  </span>
+                {% endfor %}
+              {% else %}
+                <span class="text-gray-300">—</span>
+              {% endif %}
+            </td>
+            <td class="px-4 py-3">
+              {% if rule.severity == "CRITICAL" %}
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold mono"
+                style="color:#dc2626;background:#fef2f2">CRÍTICO</span>
+              {% else %}
+              <span class="inline-flex items-center px-2.5 py-0.5 rounded-md text-xs font-bold mono"
+                style="color:#d97706;background:#fffbeb">ALERTA</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Category breakdown -->
+  {% set cats = [] %}
+  {% for rule in dq %}{% if rule.category not in cats %}{% set _ = cats.append(rule.category) %}{% endif %}{% endfor %}
+  <div class="card p-5">
+    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Por categoria</h3>
+    <div class="space-y-2">
+      {% for cat in cats %}
+      {% set cat_rules = dq | selectattr("category", "equalto", cat) | list %}
+      {% set cat_crit  = cat_rules | selectattr("severity", "equalto", "CRITICAL") | list | length %}
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-gray-600 w-40 truncate">{{ cat }}</span>
+        <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <div class="h-full rounded-full" style="width:{{ (cat_rules|length / dq|length * 100)|int }}%;background:#185FA5"></div>
+        </div>
+        <span class="text-xs text-gray-400 w-16 text-right">{{ cat_rules|length }} regra(s)</span>
+        {% if cat_crit > 0 %}
+        <span class="text-xs font-bold" style="color:#dc2626">{{ cat_crit }}✗</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>

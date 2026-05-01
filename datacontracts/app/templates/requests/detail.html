@@ -16,7 +16,7 @@
       <div class="flex-1">
         <div class="flex flex-wrap items-center gap-2 mb-3">
           {% set sc = {"OPEN":("#185FA5","#EFF6FF"),"APPROVED":("#16a34a","#F0FDF4"),"REJECTED":("#dc2626","#FEF2F2"),"IN_REVIEW":("#7c3aed","#F5F3FF")} %}
-          {% set tc = {"SCHEMA_CHANGE":("#7c3aed","#F5F3FF"),"SLA_CHANGE":("#0d9488","#F0FDFA"),"CREATE":("#185FA5","#EFF6FF"),"DEPRECATE":("#9ca3af","#F9FAFB")} %}
+          {% set tc = {"SCHEMA_CHANGE":("#7c3aed","#F5F3FF"),"SLA_CHANGE":("#0d9488","#F0FDFA"),"CREATE":("#185FA5","#EFF6FF"),"DEPRECATE":("#9ca3af","#F9FAFB"),"AMEND":("#d97706","#fffbeb")} %}
           {% set sc2,sbg = sc.get(req.status, ("#9ca3af","#F9FAFB")) %}
           {% set tc2,tbg = tc.get(req.type,   ("#9ca3af","#F9FAFB")) %}
           <span id="status-badge" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold mono"

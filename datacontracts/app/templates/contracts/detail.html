@@ -33,8 +33,9 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {% if role in ('creator','admin') %}
-        <a href="/contracts/new" class="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 transition-colors">
-          + Solicitação
+        <a href="/contracts/{{ contract.id }}/amend"
+          class="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 transition-colors">
+          Solicitar Alteração
         </a>
         {% endif %}
         <div class="relative">
@@ -56,17 +57,39 @@
     </div>
   </div>
 
+  <!-- Paired contract banner -->
+  {% if paired_contract %}
+  <div class="card px-5 py-3 flex items-center gap-3 border-l-4" style="border-left-color:#f59e0b">
+    <svg class="w-4 h-4 text-amber-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+    </svg>
+    <span class="text-xs text-gray-500">Contrato par</span>
+    <a href="/contracts/{{ paired_contract.id }}"
+      class="text-xs font-semibold mono text-blue-600 hover:underline">{{ paired_contract.name }}</a>
+    <span class="text-xs text-gray-400 mono">{{ paired_contract.location.layer }}</span>
+  </div>
+  {% endif %}
+
   <!-- Tabs -->
   <div class="border-b border-gray-200">
-    <nav class="flex gap-5 -mb-px">
-      {% set tabs = [("overview","Visão Geral"),("schema","Schema"),("location","Localização"),("partitioning","Particionamento"),("history","Histórico"),("requests","Solicitações")] %}
+    <nav class="flex gap-5 -mb-px overflow-x-auto">
+      {% set tabs = [("overview","Visão Geral"),("schema","Schema"),("location","Localização"),("partitioning","Particionamento"),("data_quality","Data Quality"),("history","Histórico"),("requests","Solicitações")] %}
+      {% if contract.get("business_logic") %}
+        {% set tabs = tabs + [("business_logic","Lógica de Negócio")] %}
+      {% endif %}
       {% for tid, tlabel in tabs %}
       <button
         hx-get="/contracts/{{ contract.id }}?tab={{ tid }}"
         hx-target="#tab-content"
         onclick="setActiveTab(this)"
-        class="tab-btn {% if tab == tid %}active{% endif %}">
+        class="tab-btn {% if tab == tid %}active{% endif %} whitespace-nowrap">
         {{ tlabel }}
+        {% if tid == "data_quality" and contract.get("data_quality") %}
+          <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold"
+            style="background:#fef2f2;color:#dc2626;font-size:10px">
+            {{ contract.data_quality | length }}
+          </span>
+        {% endif %}
       </button>
       {% endfor %}
     </nav>
@@ -78,6 +101,8 @@
     {% elif tab == "schema" %}{% include "contracts/_tab_schema.html" %}
     {% elif tab == "location" %}{% include "contracts/_tab_location.html" %}
     {% elif tab == "partitioning" %}{% include "contracts/_tab_partitioning.html" %}
+    {% elif tab == "data_quality" %}{% include "contracts/_tab_data_quality.html" %}
+    {% elif tab == "business_logic" %}{% include "contracts/_tab_business_logic.html" %}
     {% elif tab == "history" %}{% include "contracts/_tab_history.html" %}
     {% elif tab == "requests" %}{% include "contracts/_tab_requests.html" %}
     {% else %}{% include "contracts/_tab_overview.html" %}

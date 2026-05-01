@@ -10,112 +10,185 @@
 
   <div class="mb-6">
     <h1 class="text-2xl font-semibold text-gray-900">Novo Contrato</h1>
-    <p class="text-sm text-gray-500 mt-1">Preencha as informações em 3 etapas</p>
+    <p class="text-sm text-gray-500 mt-1">Preencha as informações em etapas</p>
   </div>
 
   <!-- Step indicator -->
-  <div class="flex items-center gap-2 mb-8" id="step-indicator">
-    {% for i, label in [(1,"Identificação"),(2,"Localização & SLA"),(3,"Schema")] %}
-    <div class="flex items-center gap-2">
-      <div class="step-dot w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all
-        {% if step == i %}text-white{% elif step > i %}text-white{% else %}bg-gray-200 text-gray-500{% endif %}"
-        style="{% if step == i %}background:#185FA5{% elif step > i %}background:#16a34a{% endif %}"
-        data-step="{{ i }}">
-        {% if step > i %}✓{% else %}{{ i }}{% endif %}
-      </div>
-      <span class="text-xs {% if step == i %}text-gray-800{% else %}text-gray-400{% endif %}">{{ label }}</span>
-    </div>
-    {% if not loop.last %}<div class="flex-1 h-px bg-gray-200"></div>{% endif %}
-    {% endfor %}
-  </div>
+  <div class="flex items-center gap-1 mb-8 overflow-x-auto pb-1" id="step-indicator"></div>
 
   <form method="post" action="/contracts/new" id="contract-form">
+    <!-- Serialized fields -->
+    <input type="hidden" name="dq_rules_json" id="dq_rules_json" value="[]">
+    <input type="hidden" name="paired_contract_id" id="paired_contract_id" value="">
+    <input type="hidden" name="dep_tables_json" id="dep_tables_json" value="[]">
 
-    <!-- Step 1 -->
-    <div class="step-panel {% if step != 1 %}hidden{% endif %}" data-panel="1">
-      <div class="bg-white border border-gray-200 rounded-xl p-6 space-y-4 shadow-sm">
-        <h2 class="text-sm font-semibold text-gray-700 mb-4">Etapa 1 — Identificação</h2>
+    <!-- ── STEP 1: Identificação ── -->
+    <div class="step-panel hidden" data-panel="1">
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div class="md:col-span-2">
-            <label class="block text-xs text-gray-500 mb-1.5">Nome da tabela *</label>
-            <input name="name" required placeholder="ex: tb_orders_silver" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-xs text-gray-500 mb-1.5">Descrição</label>
-            <textarea name="description" rows="2" placeholder="Descreva o propósito desta tabela..." class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"></textarea>
-          </div>
+        <!-- Import banner -->
+        <div class="bg-blue-50 border-b border-blue-100 px-6 py-3 flex items-center justify-between">
           <div>
-            <label class="block text-xs text-gray-500 mb-1.5">Domínio</label>
-            <input name="domain" placeholder="ex: Commerce" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
+            <span class="text-xs font-semibold text-blue-700">Importar schema de evento</span>
+            <span class="text-xs text-blue-400 ml-2">SNS · SQS · EventBridge · JSON livre</span>
           </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1.5">Time</label>
-            <input name="team" placeholder="ex: Data Engineering" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1.5">Owner</label>
-            <input name="owner" placeholder="ex: ana.silva@empresa.com" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1.5">Sistema de origem</label>
-            <input name="source_system" placeholder="ex: OMS, ERP, Kafka" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1.5">Classificação</label>
-            <select name="data_classification" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-              {% for c in ["PUBLIC","INTERNAL","CONFIDENTIAL","RESTRICTED"] %}
-              <option value="{{ c }}" {% if c == "INTERNAL" %}selected{% endif %}>{{ c }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs text-gray-500 mb-1.5">Tags (separadas por vírgula)</label>
-            <input name="tags" placeholder="ex: silver, commerce, orders" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
+          <button type="button" onclick="toggleImport()"
+            class="text-xs font-medium text-blue-600 border border-blue-300 bg-white hover:bg-blue-50 rounded-lg px-3 py-1.5 transition-colors">
+            Importar evento →
+          </button>
+        </div>
+
+        <!-- Import panel -->
+        <div id="import-panel" class="hidden bg-blue-50/40 border-b border-blue-100 px-6 py-4">
+          <p class="text-xs text-gray-500 mb-2">Cole o payload do evento. O schema é inferido e preenchido no Step 3.</p>
+          <textarea id="import-json" rows="7"
+            placeholder='{"event_id": "uuid-123", "user_id": "456", "amount": 99.90, "created_at": "2024-01-01T00:00:00Z"}'
+            class="w-full bg-white border border-gray-300 text-gray-800 text-xs rounded-lg px-3 py-2 font-mono focus:outline-none focus:border-blue-500 resize-none"></textarea>
+          <div class="flex items-center gap-2 mt-2">
+            <button type="button" onclick="parseImport()"
+              class="text-xs font-medium text-white rounded-lg px-4 py-1.5" style="background:#185FA5">
+              Inferir schema
+            </button>
+            <button type="button" onclick="toggleImport()" class="text-xs text-gray-500 hover:text-gray-800 px-2 py-1.5">
+              Cancelar
+            </button>
+            <span id="import-ok" class="text-xs text-green-600 hidden">✓ Schema inferido — confira no Step 3.</span>
           </div>
         </div>
 
-        <div class="flex justify-end pt-2">
-          <button type="button" onclick="goStep(2)" class="px-5 py-2 rounded-lg text-sm font-medium text-white" style="background:#185FA5">
-            Próximo →
-          </button>
+        <div class="p-6 space-y-4">
+          <h2 class="text-sm font-semibold text-gray-700">Etapa 1 — Identificação</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="md:col-span-2">
+              <label class="block text-xs text-gray-500 mb-1.5">Nome da tabela *</label>
+              <input id="f-name" name="name" required placeholder="ex: tb_orders_raw"
+                class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs text-gray-500 mb-1.5">Descrição</label>
+              <textarea name="description" rows="2" placeholder="Descreva o propósito desta tabela..."
+                class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 resize-none"></textarea>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1.5">Domínio</label>
+              <input name="domain" placeholder="ex: Commerce"
+                class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1.5">Time</label>
+              <input name="team" placeholder="ex: Data Engineering"
+                class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1.5">Owner</label>
+              <input name="owner" placeholder="ex: ana.silva@empresa.com"
+                class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1.5">Sistema de origem</label>
+              <input id="f-source" name="source_system" placeholder="ex: OMS, ERP, SNS"
+                class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1.5">Classificação</label>
+              <select name="data_classification"
+                class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                {% for c in ["PUBLIC","INTERNAL","CONFIDENTIAL","RESTRICTED"] %}
+                <option value="{{ c }}" {% if c == "INTERNAL" %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1.5">Tags (separadas por vírgula)</label>
+              <input name="tags" placeholder="ex: raw, commerce, orders"
+                class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+            </div>
+          </div>
+          <div class="flex justify-end pt-2">
+            <button type="button" onclick="goStep(2)"
+              class="px-5 py-2 rounded-lg text-sm font-medium text-white" style="background:#185FA5">
+              Próximo →
+            </button>
+          </div>
         </div>
       </div>
     </div>
 
-    <!-- Step 2 -->
-    <div class="step-panel {% if step != 2 %}hidden{% endif %}" data-panel="2">
-      <div class="bg-white border border-gray-200 rounded-xl p-6 space-y-4 shadow-sm">
-        <h2 class="text-sm font-semibold text-gray-700 mb-4">Etapa 2 — Localização & SLA</h2>
+    <!-- ── STEP 2: Localização & SLA ── -->
+    <div class="step-panel hidden" data-panel="2">
+      <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-4">
+        <h2 class="text-sm font-semibold text-gray-700">Etapa 2 — Localização & SLA</h2>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-xs text-gray-500 mb-1.5">Layer</label>
-            <select name="layer" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-              {% for l in ["RAW","BRONZE","SILVER","GOLD"] %}
-              <option value="{{ l }}">{{ l }}</option>
-              {% endfor %}
+            <select name="layer" id="layer-select" onchange="onLayerChange(this.value)"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              <optgroup label="Arquitetura Medalhão">
+                <option value="RAW">SOR — RAW (Fonte bruta)</option>
+                <option value="HARM">SOT — HARM (Harmonizado)</option>
+                <option value="SPEC">SPEC (Especializado / Negócio)</option>
+              </optgroup>
+              <optgroup label="Outras camadas">
+                <option value="BRONZE">BRONZE</option>
+                <option value="SILVER">SILVER</option>
+                <option value="GOLD">GOLD</option>
+              </optgroup>
             </select>
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1.5">Formato</label>
-            <select name="fmt" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            <select name="fmt"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
               {% for f in ["PARQUET","DELTA","JSON","CSV","ORC","AVRO"] %}
               <option value="{{ f }}">{{ f }}</option>
               {% endfor %}
             </select>
           </div>
+
+          <!-- Pairing section (RAW / HARM) -->
+          <div class="md:col-span-2 hidden" id="pairing-section">
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div class="flex items-start gap-3">
+                <svg class="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+                </svg>
+                <div class="flex-1">
+                  <p class="text-xs font-semibold text-amber-700 mb-1" id="pairing-label">Vinculação SOR ↔ SOT</p>
+                  <p class="text-xs text-amber-600 mb-2" id="pairing-desc">Selecione o contrato par correspondente.</p>
+                  <select id="paired-select"
+                    class="w-full bg-white border border-amber-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-amber-500">
+                    <option value="">— Sem vinculação —</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SPEC notice -->
+          <div class="md:col-span-2 hidden" id="spec-notice">
+            <div class="bg-purple-50 border border-purple-200 rounded-lg px-4 py-3 flex items-center gap-3">
+              <svg class="w-4 h-4 text-purple-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              <p class="text-xs text-purple-700">Camada <strong>SPEC</strong> — etapa extra de <strong>Lógica de Negócio</strong> habilitada no Step 5.</p>
+            </div>
+          </div>
+
           <div>
             <label class="block text-xs text-gray-500 mb-1.5">Bucket</label>
-            <input name="bucket" placeholder="ex: s3://datalake-prod" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
+            <input name="bucket" placeholder="ex: s3://datalake-prod"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1.5">Path</label>
-            <input name="path" placeholder="ex: /silver/commerce/orders/" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
+            <input name="path" placeholder="ex: /raw/commerce/orders/"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1.5">Compressão</label>
-            <select name="compression" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            <select name="compression"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
               {% for c in ["SNAPPY","GZIP","ZSTD","NONE"] %}
               <option value="{{ c }}">{{ c }}</option>
               {% endfor %}
@@ -123,7 +196,8 @@
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1.5">Freshness</label>
-            <select name="freshness" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            <select name="freshness"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
               {% for f in ["real-time","hourly","daily","weekly"] %}
               <option value="{{ f }}">{{ f }}</option>
               {% endfor %}
@@ -131,23 +205,28 @@
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1.5">Latência máxima (min)</label>
-            <input name="max_latency_minutes" type="number" value="60" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
+            <input name="max_latency_minutes" type="number" value="60"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1.5">Disponibilidade (%)</label>
-            <input name="availability_percent" type="number" step="0.1" value="99.0" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
+            <input name="availability_percent" type="number" step="0.1" value="99.0"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1.5">Retenção (dias)</label>
-            <input name="retention_days" type="number" value="365" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
+            <input name="retention_days" type="number" value="365"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1.5">E-mail de alerta</label>
-            <input name="alert_email" type="email" placeholder="team@empresa.com" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
+            <input name="alert_email" type="email" placeholder="team@empresa.com"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1.5">Estratégia de particionamento</label>
-            <select name="partition_strategy" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+            <select name="partition_strategy"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
               {% for s in ["DATE","DATE_HOUR","MONTH","YEAR","NONE"] %}
               <option value="{{ s }}">{{ s }}</option>
               {% endfor %}
@@ -155,25 +234,35 @@
           </div>
           <div>
             <label class="block text-xs text-gray-500 mb-1.5">Coluna de partição</label>
-            <input name="partition_column" placeholder="ex: order_date" class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"/>
+            <input name="partition_column" placeholder="ex: order_date"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
           </div>
         </div>
 
         <div class="flex justify-between pt-2">
-          <button type="button" onclick="goStep(1)" class="px-5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-300 hover:bg-gray-100">
+          <button type="button" onclick="goStep(1)"
+            class="px-5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-300 hover:bg-gray-100">
             ← Anterior
           </button>
-          <button type="button" onclick="goStep(3)" class="px-5 py-2 rounded-lg text-sm font-medium text-white" style="background:#185FA5">
+          <button type="button" onclick="goStep(3)"
+            class="px-5 py-2 rounded-lg text-sm font-medium text-white" style="background:#185FA5">
             Próximo →
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Step 3 -->
-    <div class="step-panel {% if step != 3 %}hidden{% endif %}" data-panel="3">
+    <!-- ── STEP 3: Schema ── -->
+    <div class="step-panel hidden" data-panel="3">
       <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
         <h2 class="text-sm font-semibold text-gray-700 mb-4">Etapa 3 — Schema</h2>
+
+        <div id="import-notice" class="hidden mb-4 bg-green-50 border border-green-200 rounded-lg px-4 py-2.5 flex items-center gap-2">
+          <svg class="w-4 h-4 text-green-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span class="text-xs text-green-700" id="import-notice-text">Schema importado.</span>
+        </div>
 
         <div class="overflow-x-auto">
           <table class="w-full text-sm" id="schema-table">
@@ -223,10 +312,152 @@
         </button>
 
         <div class="flex justify-between mt-6">
-          <button type="button" onclick="goStep(2)" class="px-5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-300 hover:bg-gray-100">
+          <button type="button" onclick="goStep(2)"
+            class="px-5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-300 hover:bg-gray-100">
             ← Anterior
           </button>
-          <button type="submit" class="px-6 py-2 rounded-lg text-sm font-medium text-white" style="background:#185FA5">
+          <button type="button" onclick="goStep(4)"
+            class="px-5 py-2 rounded-lg text-sm font-medium text-white" style="background:#185FA5">
+            Próximo →
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 4: Data Quality ── -->
+    <div class="step-panel hidden" data-panel="4">
+      <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+        <div class="flex items-start justify-between mb-5">
+          <div>
+            <h2 class="text-sm font-semibold text-gray-700">Etapa 4 — Data Quality</h2>
+            <p class="text-xs text-gray-400 mt-0.5">Regras SodaCore · <span class="text-red-500 font-semibold">CRÍTICO</span> bloqueia o pipeline · <span class="text-amber-500 font-semibold">ALERTA</span> só notifica</p>
+          </div>
+          <button type="button" onclick="toggleDQForm()" id="add-dq-btn"
+            class="text-xs font-medium text-white rounded-lg px-3 py-1.5 flex items-center gap-1 shrink-0" style="background:#185FA5">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Adicionar Regra
+          </button>
+        </div>
+
+        <!-- DQ add form -->
+        <div id="dq-add-form" class="hidden bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Categoria</label>
+              <select id="dq-category" onchange="onDQCategoryChange()"
+                class="w-full bg-white border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                <option value="">Selecione...</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Check</label>
+              <select id="dq-check" onchange="onDQCheckChange()"
+                class="w-full bg-white border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                <option value="">Selecione a categoria...</option>
+              </select>
+            </div>
+            <div id="dq-col-wrap" class="hidden">
+              <label class="block text-xs text-gray-500 mb-1">Coluna</label>
+              <select id="dq-column"
+                class="w-full bg-white border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                <option value="">Selecione a coluna...</option>
+              </select>
+            </div>
+          </div>
+          <div id="dq-params-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Severidade</label>
+            <div class="flex gap-2">
+              <button type="button" id="sev-critical" onclick="selectSev('CRITICAL')"
+                class="px-4 py-1.5 rounded-lg text-xs font-bold border-2 transition-colors">
+                CRÍTICO
+              </button>
+              <button type="button" id="sev-alert" onclick="selectSev('ALERT')"
+                class="px-4 py-1.5 rounded-lg text-xs font-bold border-2 transition-colors">
+                ALERTA
+              </button>
+            </div>
+          </div>
+          <div class="flex gap-2 pt-1">
+            <button type="button" onclick="addDQRule()"
+              class="px-4 py-1.5 rounded-lg text-xs font-medium text-white" style="background:#185FA5">
+              + Adicionar à lista
+            </button>
+            <button type="button" onclick="toggleDQForm()"
+              class="px-4 py-1.5 rounded-lg text-xs text-gray-500 border border-gray-300 hover:bg-gray-50">
+              Cancelar
+            </button>
+          </div>
+        </div>
+
+        <!-- DQ rules display -->
+        <div id="dq-empty" class="text-center py-10 text-gray-400 text-sm border border-dashed border-gray-200 rounded-lg">
+          Nenhuma regra adicionada. Clique em "Adicionar Regra" para começar.
+        </div>
+        <div class="overflow-x-auto hidden" id="dq-table-wrap">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-left text-gray-400 border-b border-gray-200">
+                <th class="pb-2 pr-3 font-medium">Categoria</th>
+                <th class="pb-2 pr-3 font-medium">Check</th>
+                <th class="pb-2 pr-3 font-medium">Coluna</th>
+                <th class="pb-2 pr-3 font-medium">Parâmetros</th>
+                <th class="pb-2 pr-3 font-medium">Severidade</th>
+                <th class="pb-2"></th>
+              </tr>
+            </thead>
+            <tbody id="dq-table-body"></tbody>
+          </table>
+        </div>
+
+        <div class="flex justify-between mt-6">
+          <button type="button" onclick="goStep(3)"
+            class="px-5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-300 hover:bg-gray-100">
+            ← Anterior
+          </button>
+          <button type="button" id="step4-next" onclick="step4Next()"
+            class="px-6 py-2 rounded-lg text-sm font-medium text-white" style="background:#185FA5">
+            Criar Contrato
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── STEP 5: Lógica de Negócio (SPEC only) ── -->
+    <div class="step-panel hidden" data-panel="5">
+      <div class="bg-white border border-gray-200 rounded-xl p-6 shadow-sm space-y-5">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-700">Etapa 5 — Lógica de Negócio</h2>
+          <p class="text-xs text-gray-400 mt-0.5">Exclusivo para camada SPEC. Defina o SQL de transformação e as dependências de tabelas.</p>
+        </div>
+
+        <div>
+          <label class="block text-xs text-gray-500 mb-1.5">Script SQL</label>
+          <textarea name="business_logic_sql" rows="12"
+            placeholder="SELECT&#10;  o.order_id,&#10;  o.customer_id,&#10;  SUM(o.total_amount) AS revenue&#10;FROM harm.tb_orders_harm o&#10;WHERE o.status = 'COMPLETED'&#10;GROUP BY 1, 2"
+            class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-blue-500 resize-y"></textarea>
+        </div>
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-xs font-medium text-gray-600">Tabelas dependência</label>
+            <button type="button" onclick="addDep()"
+              class="text-xs text-blue-600 hover:underline flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              Adicionar dependência
+            </button>
+          </div>
+          <p id="deps-empty" class="text-xs text-gray-400 italic py-1">Nenhuma dependência adicionada.</p>
+          <div id="deps-list" class="space-y-2"></div>
+        </div>
+
+        <div class="flex justify-between pt-2">
+          <button type="button" onclick="goStep(4)"
+            class="px-5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-300 hover:bg-gray-100">
+            ← Anterior
+          </button>
+          <button type="submit" onclick="prepareSubmit()"
+            class="px-6 py-2 rounded-lg text-sm font-medium text-white" style="background:#185FA5">
             Criar Contrato
           </button>
         </div>
@@ -239,39 +470,391 @@
 
 {% block scripts %}
 <script>
-  let currentStep = {{ step }};
+// ── STATE ─────────────────────────────────────────────────────────────────────
+const ALL_CONTRACTS = {{ contracts | tojson }};
+let currentStep = 1;
+let isSpec = false;
+let selectedSev = 'ALERT';
+let dqRules = [];
+let depTables = [];
 
-  function goStep(n) {
-    document.querySelectorAll('.step-panel').forEach(p => p.classList.add('hidden'));
-    document.querySelector(`.step-panel[data-panel="${n}"]`).classList.remove('hidden');
-    document.querySelectorAll('.step-dot').forEach(d => {
-      const s = parseInt(d.dataset.step);
-      if (s < n) { d.style.background='#16a34a'; d.style.color='#fff'; d.textContent='✓'; }
-      else if (s === n) { d.style.background='#185FA5'; d.style.color='#fff'; d.textContent=s; }
-      else { d.style.background='#e5e7eb'; d.style.color='#6b7280'; d.textContent=s; }
+// ── DQ CHECK DEFINITIONS ─────────────────────────────────────────────────────
+const DQ = {
+  "Volume": {
+    "row_count": {label:"Contagem de linhas", col:false, params:[
+      {key:"min",label:"Mínimo",type:"number",ph:"1000"},
+      {key:"max",label:"Máximo",type:"number",ph:"opcional"}
+    ]}
+  },
+  "Completude": {
+    "missing_count":   {label:"Qtd valores ausentes",   col:true,  params:[{key:"max",    label:"Máx ausentes",           type:"number",ph:"0"}]},
+    "missing_percent": {label:"% valores ausentes",     col:true,  params:[{key:"max_pct",label:"Máx % ausente (0-100)",   type:"number",ph:"5"}]},
+    "missing_values":  {label:"Valores tratados como nulo",col:true,params:[{key:"values",label:"Valores (vírgula)",        type:"text",  ph:"N/A, null, -"}]},
+    "missing_regex":   {label:"Regex de ausência",      col:true,  params:[{key:"regex",  label:"Regex",                  type:"text",  ph:"^\\s*$"}]}
+  },
+  "Unicidade": {
+    "duplicate_count":   {label:"Qtd duplicatas",  col:true, params:[{key:"max",    label:"Máx duplicatas",     type:"number",ph:"0"}]},
+    "duplicate_percent": {label:"% duplicatas",    col:true, params:[{key:"max_pct",label:"Máx % (0-100)",      type:"number",ph:"0"}]}
+  },
+  "Validade": {
+    "valid_format":     {label:"Formato padrão",            col:true, params:[{key:"format",    label:"Formato",type:"select",opts:["email","phone","uuid","ip_address","date","time","datetime","integer","decimal","credit_card","ssn"]}]},
+    "valid_regex":      {label:"Regex customizado",         col:true, params:[{key:"regex",     label:"Regex válido",                   type:"text",ph:""}]},
+    "valid_values":     {label:"Enum de valores aceitos",   col:true, params:[{key:"values",    label:"Valores aceitos (vírgula)",       type:"text",ph:"ACTIVE, INACTIVE"}]},
+    "invalid_values":   {label:"Valores proibidos",         col:true, params:[{key:"values",    label:"Valores proibidos (vírgula)",     type:"text",ph:"NULL, N/A"}]},
+    "valid_min":        {label:"Valor mínimo numérico",     col:true, params:[{key:"min",       label:"Mínimo",                         type:"number",ph:"0"}]},
+    "valid_max":        {label:"Valor máximo numérico",     col:true, params:[{key:"max",       label:"Máximo",                         type:"number",ph:""}]},
+    "valid_min_length": {label:"Tamanho mínimo (string)",   col:true, params:[{key:"min_length",label:"Mínimo chars",                   type:"number",ph:"1"}]},
+    "valid_max_length": {label:"Tamanho máximo (string)",   col:true, params:[{key:"max_length",label:"Máximo chars",                   type:"number",ph:"255"}]}
+  },
+  "Distribuição": {
+    "min":        {label:"Mínimo da coluna",  col:true, params:[{key:"threshold",label:"Threshold mínimo",    type:"number",ph:""}]},
+    "max":        {label:"Máximo da coluna",  col:true, params:[{key:"threshold",label:"Threshold máximo",    type:"number",ph:""}]},
+    "avg":        {label:"Média da coluna",   col:true, params:[{key:"min",label:"Média mínima",type:"number",ph:""},{key:"max",label:"Média máxima",type:"number",ph:""}]},
+    "sum":        {label:"Soma da coluna",    col:true, params:[{key:"min",label:"Soma mínima", type:"number",ph:""},{key:"max",label:"Soma máxima", type:"number",ph:""}]},
+    "stddev":     {label:"Desvio padrão",     col:true, params:[{key:"max",label:"Desvio máximo",      type:"number",ph:""}]},
+    "variance":   {label:"Variância",         col:true, params:[{key:"max",label:"Variância máxima",   type:"number",ph:""}]},
+    "percentile": {label:"Percentil",         col:true, params:[
+      {key:"percentile",label:"Percentil",type:"select",opts:["p25","p50","p75","p95","p99"]},
+      {key:"threshold",label:"Valor threshold",type:"number",ph:""}
+    ]}
+  },
+  "Frescor": {
+    "freshness": {label:"Frescor dos dados", col:true, params:[{key:"max_age",label:"Idade máxima (ex: 8h, 1d, 7d)",type:"text",ph:"24h"}]}
+  },
+  "Schema": {
+    "schema_column_exists": {label:"Colunas obrigatórias existem", col:false, params:[{key:"columns",label:"Colunas (vírgula)",type:"text",ph:"id, name, created_at"}]},
+    "schema_column_type":   {label:"Tipo de coluna correto",       col:true,  params:[{key:"expected_type",label:"Tipo esperado",type:"text",ph:"STRING"}]},
+    "schema_no_extra":      {label:"Sem colunas extras",           col:false, params:[{key:"columns",label:"Colunas permitidas (vírgula)",type:"text",ph:""}]}
+  },
+  "Integridade Referencial": {
+    "reference": {label:"Integridade referencial", col:true, params:[
+      {key:"ref_dataset",label:"Dataset referência",type:"text",ph:"harm.tb_customers"},
+      {key:"ref_column", label:"Coluna referência", type:"text",ph:"customer_id"}
+    ]}
+  },
+  "SQL Customizado": {
+    "failed_rows":   {label:"Linhas inválidas (SQL)", col:false, params:[{key:"sql",label:"SQL (retorna linhas inválidas)",type:"textarea",ph:"SELECT * FROM {table} WHERE amount < 0"}]},
+    "user_defined":  {label:"Métrica customizada (SQL)", col:false, params:[
+      {key:"sql",label:"SQL (retorna número)",type:"textarea",ph:"SELECT COUNT(*) FROM {table} WHERE status IS NULL"},
+      {key:"threshold",label:"Threshold",type:"number",ph:"0"}
+    ]}
+  }
+};
+
+// ── STEP INDICATOR ────────────────────────────────────────────────────────────
+const STEP_LABELS = ["Identificação","Localização & SLA","Schema","Data Quality","Lógica de Negócio"];
+
+function totalSteps() { return isSpec ? 5 : 4; }
+
+function renderStepIndicator() {
+  const total = totalSteps();
+  const el = document.getElementById('step-indicator');
+  let html = '';
+  for (let i = 1; i <= total; i++) {
+    const done = currentStep > i, active = currentStep === i;
+    let dot, lc;
+    if (done)        { dot=`<div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style="background:#16a34a">✓</div>`; lc='text-gray-400'; }
+    else if (active) { dot=`<div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0" style="background:#185FA5">${i}</div>`; lc='text-gray-800 font-semibold'; }
+    else             { dot=`<div class="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold bg-gray-200 text-gray-500 shrink-0">${i}</div>`; lc='text-gray-400'; }
+    html += `<div class="flex items-center gap-1.5 shrink-0">${dot}<span class="text-xs ${lc} hidden sm:inline whitespace-nowrap">${STEP_LABELS[i-1]}</span></div>`;
+    if (i < total) html += `<div class="flex-1 h-px bg-gray-200 min-w-3"></div>`;
+  }
+  el.innerHTML = html;
+}
+
+function goStep(n) {
+  document.querySelectorAll('.step-panel').forEach(p => p.classList.add('hidden'));
+  const panel = document.querySelector(`.step-panel[data-panel="${n}"]`);
+  if (panel) panel.classList.remove('hidden');
+  currentStep = n;
+  renderStepIndicator();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// ── LAYER CHANGE ──────────────────────────────────────────────────────────────
+function onLayerChange(val) {
+  isSpec = val === 'SPEC';
+  const pairing = document.getElementById('pairing-section');
+  const specNote = document.getElementById('spec-notice');
+  const pSel = document.getElementById('paired-select');
+
+  if (val === 'RAW' || val === 'HARM') {
+    pairing.classList.remove('hidden');
+    specNote.classList.add('hidden');
+    const comp = val === 'RAW' ? 'HARM' : 'RAW';
+    const compLabel = val === 'RAW' ? 'SOT (HARM)' : 'SOR (RAW)';
+    document.getElementById('pairing-label').textContent = val === 'RAW' ? 'Vinculação SOR → SOT' : 'Vinculação SOT → SOR';
+    document.getElementById('pairing-desc').textContent = `Selecione o contrato ${compLabel} correspondente.`;
+    const opts = ALL_CONTRACTS.filter(c => c.location.layer === comp)
+      .map(c => `<option value="${c.id}">${c.name} (${c.id})</option>`).join('');
+    pSel.innerHTML = '<option value="">— Sem vinculação —</option>' + opts;
+  } else if (val === 'SPEC') {
+    pairing.classList.add('hidden');
+    specNote.classList.remove('hidden');
+  } else {
+    pairing.classList.add('hidden');
+    specNote.classList.add('hidden');
+  }
+
+  const btn = document.getElementById('step4-next');
+  btn.textContent = isSpec ? 'Próximo →' : 'Criar Contrato';
+  renderStepIndicator();
+}
+
+function step4Next() {
+  if (isSpec) { goStep(5); }
+  else { prepareSubmit(); document.getElementById('contract-form').submit(); }
+}
+
+// ── IMPORT ────────────────────────────────────────────────────────────────────
+function toggleImport() {
+  document.getElementById('import-panel').classList.toggle('hidden');
+}
+
+function parseImport() {
+  const raw = document.getElementById('import-json').value.trim();
+  if (!raw) return;
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch(e) { alert('JSON inválido. Verifique o conteúdo.'); return; }
+
+  let payload = parsed, meta = {};
+  if (parsed.Records && parsed.Records.length > 0) {
+    const rec = parsed.Records[0];
+    if (rec.Sns) {
+      meta.source = 'SNS';
+      meta.name = (rec.Sns.TopicArn||'').split(':').pop();
+      try { payload = JSON.parse(rec.Sns.Message||'{}'); } catch(e) { payload = rec.Sns; }
+    } else if (rec.body) {
+      meta.source = 'SQS';
+      try { payload = JSON.parse(rec.body); } catch(e) { payload = {body: rec.body}; }
+    }
+  } else if (parsed.detail) {
+    meta.source = 'EventBridge';
+    meta.name = parsed['detail-type']||'';
+    payload = parsed.detail;
+  }
+
+  const fields = inferFields(payload);
+  applyFields(fields, meta);
+  document.getElementById('import-ok').classList.remove('hidden');
+  document.getElementById('import-panel').classList.add('hidden');
+}
+
+function inferType(val) {
+  if (typeof val === 'boolean') return 'BOOLEAN';
+  if (typeof val === 'number') return Number.isInteger(val) ? 'BIGINT' : 'DECIMAL';
+  if (Array.isArray(val)) return 'ARRAY';
+  if (typeof val === 'object' && val !== null) return 'MAP';
+  if (typeof val === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}T/.test(val)) return 'TIMESTAMP';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return 'DATE';
+  }
+  return 'STRING';
+}
+
+function inferFields(obj) {
+  if (typeof obj !== 'object' || obj === null || Array.isArray(obj)) return [];
+  return Object.entries(obj).map(([k,v]) => ({name:k, type:inferType(v), nullable:true, pii:'NONE', desc:''}));
+}
+
+function applyFields(fields, meta) {
+  const body = document.getElementById('fields-body');
+  body.innerHTML = '';
+  fields.forEach(f => body.insertAdjacentHTML('beforeend', fieldRowHTML(f)));
+  if (meta.source) {
+    const src = document.getElementById('f-source');
+    if (src && !src.value) src.value = meta.source;
+  }
+  if (meta.name) {
+    const nm = document.getElementById('f-name');
+    if (nm && !nm.value) nm.value = meta.name.toLowerCase().replace(/[^a-z0-9_]/g,'_');
+  }
+  document.getElementById('import-notice').classList.remove('hidden');
+  document.getElementById('import-notice-text').textContent = `Schema importado: ${fields.length} campo(s) inferido(s).`;
+}
+
+// ── SCHEMA ROWS ───────────────────────────────────────────────────────────────
+const TYPES = ["STRING","INTEGER","BIGINT","DECIMAL","FLOAT","BOOLEAN","DATE","TIMESTAMP","MAP","ARRAY"];
+const PIIS  = ["NONE","CPF","EMAIL","NAME","PHONE","IP","DATE"];
+
+function fieldRowHTML(f={}) {
+  const to = TYPES.map(t=>`<option${t===(f.type||'STRING')?' selected':''}>${t}</option>`).join('');
+  const po = PIIS.map(p=>`<option${p===(f.pii||'NONE')?' selected':''}>${p}</option>`).join('');
+  const nVal = f.name||'';
+  const dVal = f.desc||'';
+  return `<tr class="field-row border-b border-gray-100">
+    <td class="py-2 pr-2"><input name="field_names" value="${nVal}" placeholder="campo" class="w-32 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 mono focus:outline-none focus:border-blue-500"/></td>
+    <td class="py-2 pr-2"><select name="field_types" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">${to}</select></td>
+    <td class="py-2 pr-2"><select name="field_nullables" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+      <option value="true"${f.nullable!==false?' selected':''}>NULL</option>
+      <option value="false"${f.nullable===false?' selected':''}>NOT NULL</option>
+    </select></td>
+    <td class="py-2 pr-2"><select name="field_piis" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">${po}</select></td>
+    <td class="py-2 pr-2"><input name="field_descs" value="${dVal}" placeholder="descrição..." class="w-48 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"/></td>
+    <td class="py-2"><button type="button" onclick="removeRow(this)" class="text-gray-400 hover:text-red-500 text-xs px-1">✕</button></td>
+  </tr>`;
+}
+
+function addRow() { document.getElementById('fields-body').insertAdjacentHTML('beforeend', fieldRowHTML()); }
+function removeRow(btn) { btn.closest('tr').remove(); }
+
+// ── DQ: POPULATE CATEGORIES ───────────────────────────────────────────────────
+const catEl = document.getElementById('dq-category');
+Object.keys(DQ).forEach(cat => {
+  const o = document.createElement('option'); o.value=cat; o.textContent=cat; catEl.appendChild(o);
+});
+
+function getSchemaFieldNames() {
+  return Array.from(document.querySelectorAll('#fields-body input[name="field_names"]'))
+    .map(i => i.value.trim()).filter(Boolean);
+}
+
+function buildColSelect() {
+  const cols = getSchemaFieldNames();
+  const sel = document.getElementById('dq-column');
+  if (cols.length === 0) {
+    sel.innerHTML = '<option value="">— Defina campos no Step 3 primeiro —</option>';
+    sel.disabled = true;
+  } else {
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">Selecione a coluna...</option>' +
+      cols.map(c => `<option value="${c}">${c}</option>`).join('');
+  }
+}
+
+function toggleDQForm() {
+  const f = document.getElementById('dq-add-form');
+  f.classList.toggle('hidden');
+  if (!f.classList.contains('hidden')) {
+    document.getElementById('dq-category').value='';
+    document.getElementById('dq-check').innerHTML='<option value="">Selecione a categoria...</option>';
+    document.getElementById('dq-col-wrap').classList.add('hidden');
+    buildColSelect();
+    document.getElementById('dq-params-wrap').innerHTML='';
+    selectSev('ALERT');
+  }
+}
+
+function onDQCategoryChange() {
+  const cat = document.getElementById('dq-category').value;
+  const ck = document.getElementById('dq-check');
+  ck.innerHTML='<option value="">Selecione o check...</option>';
+  if (cat && DQ[cat]) {
+    Object.entries(DQ[cat]).forEach(([k,d]) => {
+      const o=document.createElement('option'); o.value=k; o.textContent=d.label||k; ck.appendChild(o);
     });
-    currentStep = n;
   }
+  document.getElementById('dq-col-wrap').classList.add('hidden');
+  document.getElementById('dq-params-wrap').innerHTML='';
+}
 
-  function fieldRowHTML() {
-    const types = ["STRING","INTEGER","BIGINT","DECIMAL","FLOAT","BOOLEAN","DATE","TIMESTAMP","MAP","ARRAY"];
-    const piis = ["NONE","CPF","EMAIL","NAME","PHONE","IP","DATE"];
-    return `<tr class="field-row border-b border-gray-100">
-      <td class="py-2 pr-2"><input name="field_names" placeholder="campo" class="w-32 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 mono focus:outline-none focus:border-blue-500"/></td>
-      <td class="py-2 pr-2"><select name="field_types" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">${types.map(t=>`<option>${t}</option>`).join('')}</select></td>
-      <td class="py-2 pr-2"><select name="field_nullables" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"><option value="true">NULL</option><option value="false">NOT NULL</option></select></td>
-      <td class="py-2 pr-2"><select name="field_piis" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">${piis.map(p=>`<option>${p}</option>`).join('')}</select></td>
-      <td class="py-2 pr-2"><input name="field_descs" placeholder="descrição..." class="w-48 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"/></td>
-      <td class="py-2"><button type="button" onclick="removeRow(this)" class="text-gray-400 hover:text-red-500 text-xs px-1">✕</button></td>
+function onDQCheckChange() {
+  const cat=document.getElementById('dq-category').value;
+  const chk=document.getElementById('dq-check').value;
+  if (!cat||!chk) return;
+  const def=DQ[cat]?.[chk]; if (!def) return;
+
+  document.getElementById('dq-col-wrap').classList.toggle('hidden', !def.col);
+  if (def.col) buildColSelect();
+
+  const pw = document.getElementById('dq-params-wrap');
+  pw.innerHTML = def.params.map(p => {
+    let inp;
+    if (p.type==='select') {
+      inp=`<select id="dqp-${p.key}" class="w-full bg-white border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">${p.opts.map(o=>`<option>${o}</option>`).join('')}</select>`;
+    } else if (p.type==='textarea') {
+      inp=`<textarea id="dqp-${p.key}" rows="3" placeholder="${p.ph||''}" class="w-full bg-white border border-gray-300 text-gray-800 text-xs rounded-lg px-3 py-2 font-mono focus:outline-none focus:border-blue-500 resize-none"></textarea>`;
+    } else {
+      inp=`<input id="dqp-${p.key}" type="${p.type}" placeholder="${p.ph||''}" class="w-full bg-white border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>`;
+    }
+    return `<div><label class="block text-xs text-gray-500 mb-1">${p.label}</label>${inp}</div>`;
+  }).join('');
+}
+
+function selectSev(sev) {
+  selectedSev=sev;
+  const cr=document.getElementById('sev-critical');
+  const al=document.getElementById('sev-alert');
+  if (sev==='CRITICAL') {
+    cr.style.cssText='background:#ef4444;color:#fff;border-color:#ef4444';
+    al.style.cssText='background:#fff;color:#6b7280;border-color:#d1d5db';
+  } else {
+    al.style.cssText='background:#f59e0b;color:#fff;border-color:#f59e0b';
+    cr.style.cssText='background:#fff;color:#6b7280;border-color:#d1d5db';
+  }
+}
+
+function addDQRule() {
+  const cat=document.getElementById('dq-category').value;
+  const chk=document.getElementById('dq-check').value;
+  if (!cat||!chk) { alert('Selecione categoria e check.'); return; }
+  const def=DQ[cat][chk];
+  const colEl = document.getElementById('dq-column');
+  const col = def.col ? colEl.value.trim() : '';
+  if (def.col && !col) { alert('Selecione uma coluna. Se não há opções, defina os campos no Step 3 primeiro.'); return; }
+  const params={};
+  def.params.forEach(p => { const el=document.getElementById(`dqp-${p.key}`); if(el) params[p.key]=el.value.trim(); });
+  dqRules.push({category:cat, check:chk, column:col, params, severity:selectedSev});
+  renderDQTable();
+  toggleDQForm();
+}
+
+function removeDQRule(idx) { dqRules.splice(idx,1); renderDQTable(); }
+
+function renderDQTable() {
+  const empty=document.getElementById('dq-empty');
+  const wrap=document.getElementById('dq-table-wrap');
+  const tbody=document.getElementById('dq-table-body');
+  if (!dqRules.length) { empty.classList.remove('hidden'); wrap.classList.add('hidden'); return; }
+  empty.classList.add('hidden'); wrap.classList.remove('hidden');
+  tbody.innerHTML=dqRules.map((r,i) => {
+    const ps=Object.entries(r.params).filter(([,v])=>v).map(([k,v])=>`${k}:${v}`).join(' · ');
+    const sc=r.severity==='CRITICAL'?'color:#dc2626;background:#fef2f2':'color:#d97706;background:#fffbeb';
+    return `<tr class="border-b border-gray-100">
+      <td class="py-2 pr-3 text-gray-600">${r.category}</td>
+      <td class="py-2 pr-3 mono text-gray-800 text-xs">${r.check}</td>
+      <td class="py-2 pr-3 mono text-gray-500">${r.column||'—'}</td>
+      <td class="py-2 pr-3 text-gray-400 text-xs">${ps||'—'}</td>
+      <td class="py-2 pr-3"><span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold mono" style="${sc}">${r.severity}</span></td>
+      <td class="py-2"><button type="button" onclick="removeDQRule(${i})" class="text-gray-400 hover:text-red-500">✕</button></td>
     </tr>`;
-  }
+  }).join('');
+}
 
-  function addRow() {
-    document.getElementById('fields-body').insertAdjacentHTML('beforeend', fieldRowHTML());
-  }
+// ── DEPENDENCIES ─────────────────────────────────────────────────────────────
+function addDep() { depTables.push({table:'',contract_id:''}); renderDeps(); }
+function removeDep(idx) { depTables.splice(idx,1); renderDeps(); }
 
-  function removeRow(btn) {
-    btn.closest('tr').remove();
-  }
+function renderDeps() {
+  const empty=document.getElementById('deps-empty');
+  const list=document.getElementById('deps-list');
+  if (!depTables.length) { empty.classList.remove('hidden'); list.innerHTML=''; return; }
+  empty.classList.add('hidden');
+  const copts=ALL_CONTRACTS.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  list.innerHTML=depTables.map((d,i)=>`
+    <div class="flex items-center gap-2">
+      <input value="${d.table}" onchange="depTables[${i}].table=this.value" placeholder="schema.table_name"
+        class="flex-1 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+      <select onchange="depTables[${i}].contract_id=this.value"
+        class="flex-1 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+        <option value="">— Contrato (opcional) —</option>${copts}
+      </select>
+      <button type="button" onclick="removeDep(${i})" class="text-gray-400 hover:text-red-500 text-xs shrink-0">✕</button>
+    </div>`).join('');
+}
+
+// ── SUBMIT ────────────────────────────────────────────────────────────────────
+function prepareSubmit() {
+  document.getElementById('dq_rules_json').value = JSON.stringify(dqRules);
+  document.getElementById('dep_tables_json').value = JSON.stringify(depTables);
+  document.getElementById('paired_contract_id').value = document.getElementById('paired-select')?.value || '';
+}
+
+document.getElementById('contract-form').addEventListener('submit', prepareSubmit);
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+selectSev('ALERT');
+renderStepIndicator();
+goStep({{ step }});
 </script>
 {% endblock %}
