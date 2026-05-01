@@ -1,0 +1,16 @@
+[Unit]
+Description=Data Contract Manager FastAPI app
+After=network.target
+
+[Service]
+User=ubuntu
+Group=www-data
+WorkingDirectory=/opt/datacontract-manager
+Environment="PATH=/opt/datacontract-manager/.venv/bin"
+Environment="DCM_DATABASE_PATH=/opt/datacontract-manager/data/dcm.sqlite3"
+ExecStart=/opt/datacontract-manager/.venv/bin/python -m uvicorn datacontracts.app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

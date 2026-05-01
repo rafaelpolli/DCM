@@ -345,22 +345,14 @@ CHANGE_REQUESTS = {
 }
 
 # ── Helper counters ────────────────────────────────────────────────────────────
-_contract_seq = 6
-_request_seq = 4
-
-
 def next_contract_id() -> str:
-    global _contract_seq
-    cid = f"c-{_contract_seq:03d}"
-    _contract_seq += 1
-    return cid
+    existing = [int(cid.split("-", 1)[1]) for cid in CONTRACTS if cid.startswith("c-") and cid.split("-", 1)[1].isdigit()]
+    return f"c-{(max(existing) if existing else 0) + 1:03d}"
 
 
 def next_request_id() -> str:
-    global _request_seq
-    rid = f"r-{_request_seq:03d}"
-    _request_seq += 1
-    return rid
+    existing = [int(rid.split("-", 1)[1]) for rid in CHANGE_REQUESTS if rid.startswith("r-") and rid.split("-", 1)[1].isdigit()]
+    return f"r-{(max(existing) if existing else 0) + 1:03d}"
 
 
 # ── Derived stats (computed on-the-fly) ───────────────────────────────────────

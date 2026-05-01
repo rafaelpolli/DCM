@@ -1,21 +1,31 @@
 import json
 import yaml
 from datetime import date
+from pathlib import Path
 from fastapi import FastAPI, Request, Form, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from typing import List
 
-from app.mock_data import (
+from .mock_data import (
     CONTRACTS, CHANGE_REQUESTS, USERS,
     get_stats, recent_requests,
     next_contract_id, next_request_id,
 )
+from .storage import init_database, load_change_requests, load_contracts, save_change_request, save_contract
+
+BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title="DataContracts")
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-templates = Jinja2Templates(directory="app/templates")
+app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+init_database(CONTRACTS, CHANGE_REQUESTS)
+CONTRACTS.clear()
+CONTRACTS.update(load_contracts())
+CHANGE_REQUESTS.clear()
+CHANGE_REQUESTS.update(load_change_requests())
 
 # ── auth ───────────────────────────────────────────────────────────────────────
 LOGIN_MAP = {
@@ -184,6 +194,7 @@ async def contract_create(
         "history": [{"version": "0.1.0", "date": today, "author": owner, "note": "Versão inicial (rascunho)"}],
     }
     CONTRACTS[cid] = contract
+    save_contract(contract)
 
     rid = next_request_id()
     user = get_user(request)
@@ -202,6 +213,7 @@ async def contract_create(
         "diff": {"version_from": None, "version_to": "0.1.0", "changes": []},
         "comments": [],
     }
+    save_change_request(CHANGE_REQUESTS[rid])
     return RedirectResponse(url=f"/contracts/{cid}?toast=criado", status_code=302)
 
 # ── contract detail + tabs ─────────────────────────────────────────────────────
@@ -295,6 +307,9 @@ async def request_approve(request: Request, rid: str):
         contract = CONTRACTS.get(req["contract_id"])
         if contract and contract["status"] == "PENDING":
             contract["status"] = "APPROVED"
+            contract["updated_at"] = str(date.today())
+            save_contract(contract)
+        save_change_request(req)
     return tpl(request, "requests/_status_badge.html", req=req, toast="Solicitação aprovada!")
 
 @app.post("/requests/{rid}/reject", response_class=HTMLResponse)
@@ -306,6 +321,7 @@ async def request_reject(request: Request, rid: str, justification: str = Form("
         if justification:
             user = get_user(request)
             req["comments"].append({"author": user["name"], "date": str(date.today()), "text": f"[Rejeição] {justification}"})
+        save_change_request(req)
     return tpl(request, "requests/_status_badge.html", req=req, toast="Solicitação rejeitada.")
 
 # ── add comment ────────────────────────────────────────────────────────────────
@@ -315,4 +331,5 @@ async def add_comment(request: Request, rid: str, text: str = Form(...)):
     user = get_user(request)
     if req and text.strip():
         req["comments"].append({"author": user["name"], "date": str(date.today()), "text": text.strip()})
+        save_change_request(req)
     return tpl(request, "requests/_comments.html", req=req)
