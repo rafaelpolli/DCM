@@ -28,7 +28,7 @@
     #wrap {
       position: fixed; inset: 0; z-index: 10;
       display: flex; align-items: center; justify-content: center;
-      opacity: 1; transform: none;
+      opacity: 0; transform: translateY(18px) scale(0.97);
       transition: opacity .8s cubic-bezier(.16,1,.3,1), transform .8s cubic-bezier(.16,1,.3,1);
     }
     #wrap.in  { opacity: 1; transform: none; }
@@ -210,7 +210,7 @@ function buildField(t) {
 }
 
 // ── Particle ──────────────────────────────────────────────
-const TOTAL = 230;
+const TOTAL = 200;
 let particles = [];
 
 class P {
@@ -225,7 +225,7 @@ class P {
     this.life = life;
     this.maxL = 200 + Math.random() * 150;
     this.spd  = 0.7 + Math.random() * 1.1;
-    this.sz   = 1.4 + Math.random() * 2.4;
+    this.sz   = 0.5 + Math.random() * 1.5;
     this.orange = Math.random() > 0.44;
     this.vx = 0; this.vy = 0; // for success mode
   }
@@ -264,11 +264,10 @@ class P {
     const lt = this.life / this.maxL;
     const fade = mode === 'normal' || mode === 'intro'
       ? (lt < 0.12 ? lt/0.12 : lt > 0.88 ? (1-lt)/0.12 : 1) : 1;
-    const baseA = this.orange ? 0.72 : 0.58;
+    const baseA = this.orange ? 0.55 : 0.42;
     ctx.globalAlpha = fade * baseA;
     ctx.strokeStyle = this.orange ? '#FF6200' : '#185FA5';
     ctx.lineWidth   = this.sz;
-    ctx.lineCap     = 'round';
     ctx.beginPath();
     ctx.moveTo(this.px, this.py);
     ctx.lineTo(this.x,  this.y);

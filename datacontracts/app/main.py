@@ -1,31 +1,22 @@
 import json
 import yaml
 from datetime import date
-from pathlib import Path
 from fastapi import FastAPI, Request, Form, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from typing import List, Optional
+from typing import List
 
-from .mock_data import (
+from app.mock_data import (
     CONTRACTS, CHANGE_REQUESTS, USERS,
     get_stats, recent_requests,
     next_contract_id, next_request_id,
 )
-from .storage import init_database, load_change_requests, load_contracts, save_change_request, save_contract
-
-BASE_DIR = Path(__file__).resolve().parent
+from app.agents_engine.main import app as agents_engine_app
 
 app = FastAPI(title="DataContracts")
-app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-
-init_database(CONTRACTS, CHANGE_REQUESTS)
-CONTRACTS.clear()
-CONTRACTS.update(load_contracts())
-CHANGE_REQUESTS.clear()
-CHANGE_REQUESTS.update(load_change_requests())
+app.mount("/static", StaticFiles(directory="app/static/"), name="static")
+templates = Jinja2Templates(directory="app/templates")
 
 # ── auth ───────────────────────────────────────────────────────────────────────
 LOGIN_MAP = {
@@ -111,58 +102,9 @@ async def contracts_list(request: Request, status: str = "", layer: str = "", q:
     return tpl(request, "contracts/list.html", contracts=items, status=status, layer=layer, q=q, page="contracts")
 
 # ── new contract form ──────────────────────────────────────────────────────────
-@app.post("/contracts/parse-event")
-async def parse_event(request: Request):
-    try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse({"error": "JSON inválido"}, status_code=400)
-
-    raw = body.get("event", {})
-
-    def infer_type(val):
-        if isinstance(val, bool): return "BOOLEAN"
-        if isinstance(val, int): return "BIGINT"
-        if isinstance(val, float): return "DECIMAL"
-        if isinstance(val, dict): return "MAP"
-        if isinstance(val, list): return "ARRAY"
-        if isinstance(val, str):
-            if len(val) == 10 and val[4] == "-" and val[7] == "-": return "DATE"
-            if "T" in val and val.endswith("Z"): return "TIMESTAMP"
-        return "STRING"
-
-    payload, meta = raw, {}
-    if isinstance(raw, dict):
-        if "Records" in raw and raw["Records"]:
-            rec = raw["Records"][0]
-            sns = rec.get("Sns", {})
-            if sns:
-                meta["source_system"] = "SNS"
-                arn = sns.get("TopicArn", "")
-                meta["name_hint"] = arn.split(":")[-1] if arn else ""
-                try: payload = json.loads(sns.get("Message", "{}"))
-                except Exception: payload = sns
-            elif rec.get("body"):
-                meta["source_system"] = "SQS"
-                try: payload = json.loads(rec["body"])
-                except Exception: payload = {"body": rec["body"]}
-        elif "detail" in raw:
-            meta["source_system"] = "EventBridge"
-            meta["name_hint"] = raw.get("detail-type", "")
-            payload = raw["detail"]
-
-    fields = []
-    if isinstance(payload, dict):
-        for key, val in payload.items():
-            fields.append({"name": key, "type": infer_type(val), "nullable": True, "pii": "NONE", "description": ""})
-
-    return JSONResponse({"fields": fields, "meta": meta})
-
-
 @app.get("/contracts/new", response_class=HTMLResponse)
 async def contract_new(request: Request, step: int = 1):
-    return tpl(request, "contracts/form.html", step=step, page="contracts",
-               contracts=list(CONTRACTS.values()))
+    return tpl(request, "contracts/form.html", step=step, page="contracts")
 
 @app.post("/contracts/new", response_class=HTMLResponse)
 async def contract_create(
@@ -194,10 +136,6 @@ async def contract_create(
     field_nullables: List[str] = Form(default=[]),
     field_piis: List[str] = Form(default=[]),
     field_descs: List[str] = Form(default=[]),
-    paired_contract_id: str = Form(""),
-    dq_rules_json: str = Form("[]"),
-    business_logic_sql: str = Form(""),
-    dep_tables_json: str = Form("[]"),
 ):
     cid = next_contract_id()
     today = str(date.today())
@@ -213,20 +151,6 @@ async def contract_create(
                 "pii": field_piis[i] if i < len(field_piis) else "NONE",
                 "description": field_descs[i] if i < len(field_descs) else "",
             })
-
-    try:
-        dq_rules = json.loads(dq_rules_json or "[]")
-    except Exception:
-        dq_rules = []
-
-    try:
-        dep_tables = json.loads(dep_tables_json or "[]")
-    except Exception:
-        dep_tables = []
-
-    business_logic = None
-    if layer == "SPEC" and (business_logic_sql.strip() or dep_tables):
-        business_logic = {"sql": business_logic_sql.strip(), "dependencies": dep_tables}
 
     contract = {
         "id": cid,
@@ -258,19 +182,9 @@ async def contract_create(
             "pruning_enabled": pruning_enabled.lower() == "true",
         },
         "fields": fields,
-        "data_quality": dq_rules,
-        "paired_contract_id": paired_contract_id.strip() or None,
-        "business_logic": business_logic,
         "history": [{"version": "0.1.0", "date": today, "author": owner, "note": "Versão inicial (rascunho)"}],
     }
     CONTRACTS[cid] = contract
-    save_contract(contract)
-
-    if paired_contract_id.strip() and paired_contract_id in CONTRACTS:
-        partner = CONTRACTS[paired_contract_id]
-        partner["paired_contract_id"] = cid
-        partner["updated_at"] = today
-        save_contract(partner)
 
     rid = next_request_id()
     user = get_user(request)
@@ -289,7 +203,6 @@ async def contract_create(
         "diff": {"version_from": None, "version_to": "0.1.0", "changes": []},
         "comments": [],
     }
-    save_change_request(CHANGE_REQUESTS[rid])
     return RedirectResponse(url=f"/contracts/{cid}?toast=criado", status_code=302)
 
 # ── contract detail + tabs ─────────────────────────────────────────────────────
@@ -300,164 +213,11 @@ async def contract_detail(request: Request, cid: str, tab: str = "overview", toa
         return HTMLResponse("<h1>Contrato não encontrado</h1>", status_code=404)
     related = [r for r in CHANGE_REQUESTS.values() if r["contract_id"] == cid]
 
-    paired = CONTRACTS.get(contract.get("paired_contract_id")) if contract.get("paired_contract_id") else None
-
     if "HX-Request" in request.headers:
-        return tpl(request, f"contracts/_tab_{tab}.html", contract=contract, tab=tab,
-                   related_requests=related, paired_contract=paired)
+        return tpl(request, f"contracts/_tab_{tab}.html", contract=contract, tab=tab, related_requests=related)
 
     return tpl(request, "contracts/detail.html",
-        contract=contract, tab=tab, toast=toast, related_requests=related,
-        paired_contract=paired, page="contracts")
-
-# ── contract amendment ─────────────────────────────────────────────────────────
-@app.get("/contracts/{cid}/amend", response_class=HTMLResponse)
-async def contract_amend_form(request: Request, cid: str):
-    auth = require_auth(request)
-    if auth: return auth
-    contract = CONTRACTS.get(cid)
-    if not contract:
-        return HTMLResponse("Não encontrado", status_code=404)
-    safe = {**contract, "data_quality": contract.get("data_quality") or [], "business_logic": contract.get("business_logic") or None}
-    return tpl(request, "contracts/amend.html",
-               contract=safe, contracts=list(CONTRACTS.values()), page="contracts")
-
-@app.post("/contracts/{cid}/amend", response_class=HTMLResponse)
-async def contract_amend_submit(
-    request: Request,
-    cid: str,
-    amend_reason: str = Form(""),
-    diff_json: str = Form("[]"),
-    name: str = Form(...),
-    description: str = Form(""),
-    domain: str = Form(""),
-    team: str = Form(""),
-    owner: str = Form(""),
-    source_system: str = Form(""),
-    data_classification: str = Form("INTERNAL"),
-    tags: str = Form(""),
-    layer: str = Form("BRONZE"),
-    bucket: str = Form(""),
-    path: str = Form(""),
-    fmt: str = Form("PARQUET"),
-    compression: str = Form("SNAPPY"),
-    freshness: str = Form("daily"),
-    max_latency_minutes: int = Form(60),
-    availability_percent: float = Form(99.0),
-    retention_days: int = Form(365),
-    alert_email: str = Form(""),
-    partition_strategy: str = Form("DATE"),
-    partition_column: str = Form(""),
-    partition_format: str = Form("yyyy/MM/dd"),
-    pruning_enabled: str = Form("false"),
-    field_names: List[str] = Form(default=[]),
-    field_types: List[str] = Form(default=[]),
-    field_nullables: List[str] = Form(default=[]),
-    field_piis: List[str] = Form(default=[]),
-    field_descs: List[str] = Form(default=[]),
-    paired_contract_id: str = Form(""),
-    dq_rules_json: str = Form("[]"),
-    business_logic_sql: str = Form(""),
-    dep_tables_json: str = Form("[]"),
-):
-    contract = CONTRACTS.get(cid)
-    if not contract:
-        return HTMLResponse("Não encontrado", status_code=404)
-
-    today = str(date.today())
-
-    fields = []
-    for i, fname in enumerate(field_names):
-        if fname.strip():
-            fields.append({
-                "name": fname.strip(),
-                "type": field_types[i] if i < len(field_types) else "STRING",
-                "nullable": field_nullables[i].lower() == "true" if i < len(field_nullables) else True,
-                "pk": False,
-                "pii": field_piis[i] if i < len(field_piis) else "NONE",
-                "description": field_descs[i] if i < len(field_descs) else "",
-            })
-
-    try: dq_rules = json.loads(dq_rules_json or "[]")
-    except: dq_rules = []
-
-    try: dep_tables = json.loads(dep_tables_json or "[]")
-    except: dep_tables = []
-
-    bl = contract.get("business_logic")
-    if layer == "SPEC" and (business_logic_sql.strip() or dep_tables):
-        bl = {"sql": business_logic_sql.strip(), "dependencies": dep_tables}
-
-    parts = contract["version"].split(".")
-    try: new_minor = int(parts[1]) + 1
-    except: new_minor = 1
-    proposed_version = f"{parts[0]}.{new_minor}.{parts[2] if len(parts) > 2 else '0'}"
-
-    proposed = {
-        **contract,
-        "name": name,
-        "description": description,
-        "domain": domain,
-        "team": team,
-        "owner": owner,
-        "source_system": source_system,
-        "data_classification": data_classification,
-        "tags": [t.strip() for t in tags.split(",") if t.strip()],
-        "version": proposed_version,
-        "location": {"layer": layer, "bucket": bucket, "path": path, "format": fmt, "compression": compression},
-        "sla": {
-            "freshness": freshness,
-            "max_latency_minutes": max_latency_minutes,
-            "availability_percent": availability_percent,
-            "retention_days": retention_days,
-            "alert_email": alert_email,
-        },
-        "partitioning": {
-            "strategy": partition_strategy,
-            "partition_column": partition_column,
-            "partition_format": partition_format,
-            "pruning_enabled": pruning_enabled.lower() == "true",
-        },
-        "fields": fields,
-        "data_quality": dq_rules,
-        "paired_contract_id": paired_contract_id.strip() or contract.get("paired_contract_id"),
-        "business_logic": bl,
-        "updated_at": today,
-    }
-
-    try: diff_changes = json.loads(diff_json or "[]")
-    except: diff_changes = []
-
-    rid = next_request_id()
-    user = get_user(request)
-
-    CHANGE_REQUESTS[rid] = {
-        "id": rid,
-        "title": f"Alterar contrato {contract['name']}",
-        "type": "AMEND",
-        "contract_id": cid,
-        "contract_name": contract["name"],
-        "requester": user["email"],
-        "requester_name": user["name"],
-        "status": "OPEN",
-        "created_at": today,
-        "updated_at": today,
-        "description": amend_reason,
-        "diff": {
-            "version_from": contract["version"],
-            "version_to": proposed_version,
-            "changes": diff_changes,
-            "proposed": proposed,
-        },
-        "comments": [],
-    }
-    save_change_request(CHANGE_REQUESTS[rid])
-
-    contract["status"] = "PENDING"
-    contract["updated_at"] = today
-    save_contract(contract)
-
-    return RedirectResponse(url=f"/requests/{rid}?toast=Solicitação+enviada+para+aprovação!", status_code=302)
+        contract=contract, tab=tab, toast=toast, related_requests=related, page="contracts")
 
 # ── export ─────────────────────────────────────────────────────────────────────
 @app.get("/contracts/{cid}/export", response_class=HTMLResponse)
@@ -534,26 +294,8 @@ async def request_approve(request: Request, rid: str):
         req["status"] = "APPROVED"
         req["updated_at"] = str(date.today())
         contract = CONTRACTS.get(req["contract_id"])
-        if contract:
-            if req.get("type") == "AMEND" and req["diff"].get("proposed"):
-                proposed = req["diff"]["proposed"]
-                proposed["status"] = "APPROVED"
-                proposed["updated_at"] = str(date.today())
-                proposed["version"] = req["diff"].get("version_to", contract["version"])
-                hist_entry = {
-                    "version": proposed["version"],
-                    "date": str(date.today()),
-                    "author": req["requester_name"],
-                    "note": f"Alteração aprovada: {req.get('description') or 'sem descrição'}",
-                }
-                proposed.setdefault("history", []).append(hist_entry)
-                CONTRACTS[req["contract_id"]] = proposed
-                save_contract(proposed)
-            elif contract.get("status") == "PENDING":
-                contract["status"] = "APPROVED"
-                contract["updated_at"] = str(date.today())
-                save_contract(contract)
-        save_change_request(req)
+        if contract and contract["status"] == "PENDING":
+            contract["status"] = "APPROVED"
     return tpl(request, "requests/_status_badge.html", req=req, toast="Solicitação aprovada!")
 
 @app.post("/requests/{rid}/reject", response_class=HTMLResponse)
@@ -565,7 +307,6 @@ async def request_reject(request: Request, rid: str, justification: str = Form("
         if justification:
             user = get_user(request)
             req["comments"].append({"author": user["name"], "date": str(date.today()), "text": f"[Rejeição] {justification}"})
-        save_change_request(req)
     return tpl(request, "requests/_status_badge.html", req=req, toast="Solicitação rejeitada.")
 
 # ── add comment ────────────────────────────────────────────────────────────────
@@ -575,5 +316,14 @@ async def add_comment(request: Request, rid: str, text: str = Form(...)):
     user = get_user(request)
     if req and text.strip():
         req["comments"].append({"author": user["name"], "date": str(date.today()), "text": text.strip()})
-        save_change_request(req)
     return tpl(request, "requests/_comments.html", req=req)
+
+# ── agents studio ──────────────────────────────────────────────────────────────
+@app.get("/agents", response_class=HTMLResponse)
+async def agents_page(request: Request):
+    auth = require_auth(request)
+    if auth: return auth
+    return FileResponse("app/static/agents/index.html")
+
+app.mount("/agents", StaticFiles(directory="app/static/agents"), name="agents_studio")
+app.mount("/api/agents", agents_engine_app, name="agents_engine")
