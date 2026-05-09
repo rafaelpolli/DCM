@@ -1,21 +1,46 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { fetchRequest, approveRequest, rejectRequest, addComment } from '../../api/dcm';
 import { useAuthStore } from '../../store/authStore';
-import { StatusBadge } from '../../components/shared/StatusBadge';
 import { showToast } from '../../components/shared/Toast';
-import type { ChangeRequest, Contract } from '../../types/dcm';
+import type { ChangeRequest, Contract, DiffChange } from '../../types/dcm';
+
+const STATUS_COLORS: Record<string, [string, string]> = {
+  OPEN:      ['#185FA5', '#EFF6FF'],
+  APPROVED:  ['#16a34a', '#F0FDF4'],
+  REJECTED:  ['#dc2626', '#FEF2F2'],
+  IN_REVIEW: ['#7c3aed', '#F5F3FF'],
+};
+
+const TYPE_COLORS: Record<string, [string, string]> = {
+  SCHEMA_CHANGE: ['#7c3aed', '#F5F3FF'],
+  SLA_CHANGE:    ['#0d9488', '#F0FDFA'],
+  CREATE:        ['#185FA5', '#EFF6FF'],
+  UPDATE:        ['#185FA5', '#EFF6FF'],
+  DELETE:        ['#dc2626', '#FEF2F2'],
+  DEPRECATE:     ['#9ca3af', '#F9FAFB'],
+  AMEND:         ['#d97706', '#fffbeb'],
+};
+
+const DEFAULT_COLOR: [string, string] = ['#9ca3af', '#F9FAFB'];
+
+function diffOp(c: DiffChange): 'add' | 'remove' | 'modify' {
+  if (c.from == null) return 'add';
+  if (c.to == null) return 'remove';
+  return 'modify';
+}
 
 export function RequestDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { token, user } = useAuthStore();
-  const navigate = useNavigate();
 
   const [req, setReq] = useState<ChangeRequest | null>(null);
   const [contract, setContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [comment, setComment] = useState('');
+  const [commentText, setCommentText] = useState('');
+  const [rejectText, setRejectText] = useState('');
+  const [showRejectForm, setShowRejectForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const load = () => {
@@ -33,7 +58,7 @@ export function RequestDetailPage() {
     setSubmitting(true);
     try {
       await approveRequest(token, id);
-      showToast('Solicitacao aprovada!');
+      showToast('Solicitação aprovada!');
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao aprovar');
@@ -43,12 +68,13 @@ export function RequestDetailPage() {
   };
 
   const handleReject = async () => {
-    if (!token || !id || !comment.trim()) return;
+    if (!token || !id || !rejectText.trim()) return;
     setSubmitting(true);
     try {
-      await rejectRequest(token, id, comment);
-      showToast('Solicitacao rejeitada');
-      setComment('');
+      await rejectRequest(token, id, rejectText);
+      showToast('Solicitação rejeitada');
+      setRejectText('');
+      setShowRejectForm(false);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao rejeitar');
@@ -58,12 +84,12 @@ export function RequestDetailPage() {
   };
 
   const handleComment = async () => {
-    if (!token || !id || !comment.trim()) return;
+    if (!token || !id || !commentText.trim()) return;
     setSubmitting(true);
     try {
-      await addComment(token, id, comment);
-      showToast('Comentario adicionado');
-      setComment('');
+      await addComment(token, id, commentText);
+      showToast('Comentário adicionado');
+      setCommentText('');
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Falha ao comentar');
@@ -76,7 +102,7 @@ export function RequestDetailPage() {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="w-2 h-2 rounded-full bg-brand animate-pulse" />
-        <span className="ml-3 text-sm text-gray-400">Carregando solicitacao...</span>
+        <span className="ml-3 text-sm text-gray-400">Carregando solicitação...</span>
       </div>
     );
   }
@@ -84,180 +110,211 @@ export function RequestDetailPage() {
   if (error || !req) {
     return (
       <div className="card p-8 text-center">
-        <div className="text-red-500 text-sm mb-2">Erro ao carregar solicitacao</div>
+        <div className="text-red-500 text-sm mb-2">Erro ao carregar solicitação</div>
         <div className="text-gray-400 text-xs font-mono">{error || 'Not found'}</div>
         <Link to="/requests" className="text-brand text-sm mt-4 inline-block hover:underline">Voltar</Link>
       </div>
     );
   }
 
+  const [sc, sbg] = STATUS_COLORS[req.status] ?? DEFAULT_COLOR;
+  const [tc, tbg] = TYPE_COLORS[req.type] ?? DEFAULT_COLOR;
+  const changes = req.diff?.changes ?? [];
+
+  const removes = changes.filter(c => diffOp(c) === 'remove');
+  const adds    = changes.filter(c => diffOp(c) === 'add');
+  const mods    = changes.filter(c => diffOp(c) === 'modify');
+
   return (
-    <div>
-      <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-        <Link to="/requests" className="hover:text-brand transition-colors">Solicitacoes</Link>
+    <div className="max-w-5xl mx-auto space-y-5">
+      {/* Breadcrumb */}
+      <div className="flex items-center gap-2 text-xs text-gray-400">
+        <Link to="/requests" className="hover:text-orange-500 transition-colors">Solicitações</Link>
         <span>/</span>
-        <span className="text-gray-700 font-medium">{req.title}</span>
+        <span className="text-gray-600 font-mono">{req.id}</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
-        {/* Main content */}
-        <div className="col-span-2 space-y-5">
-          {/* Request info */}
-          <div className="card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h1 className="text-xl font-bold text-gray-900">{req.title}</h1>
-              <StatusBadge status={req.status} />
+      {/* Header card */}
+      <div className="card p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold font-mono"
+                style={{ color: sc, background: sbg }}>
+                {req.status}
+              </span>
+              <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold font-mono"
+                style={{ color: tc, background: tbg }}>
+                {req.type}
+              </span>
             </div>
-
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div>
-                <span className="text-xs text-gray-400">Tipo: </span>
-                <span className="text-xs font-mono text-gray-700 bg-gray-100 rounded px-2 py-0.5">{req.type}</span>
-              </div>
-              <div>
-                <span className="text-xs text-gray-400">Solicitante: </span>
-                <span className="text-sm text-gray-700">{req.requester_name}</span>
-              </div>
-              <div>
-                <span className="text-xs text-gray-400">Criado: </span>
-                <span className="text-xs font-mono text-gray-600">{req.created_at}</span>
-              </div>
-              <div>
-                <span className="text-xs text-gray-400">Atualizado: </span>
-                <span className="text-xs font-mono text-gray-600">{req.updated_at}</span>
-              </div>
-            </div>
-
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="text-xs text-gray-400 mb-1">Descricao</div>
-              <div className="text-sm text-gray-700">{req.description}</div>
-            </div>
-
-            {/* Contract link */}
-            {contract && (
-              <div className="mt-4 flex items-center gap-2">
-                <span className="text-xs text-gray-400">Contrato:</span>
-                <Link to={`/contracts/${contract.id}`} className="text-sm font-semibold text-brand hover:underline">
-                  {contract.name}
+            <h1 className="text-xl font-bold text-gray-900">{req.title}</h1>
+            <p className="text-sm text-gray-500 mt-1">{req.description}</p>
+            <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-gray-400">
+              <span>Solicitante: <span className="text-gray-700 font-medium">{req.requester_name}</span></span>
+              <span>·</span>
+              <span>Contrato:{' '}
+                <Link to={`/contracts/${req.contract_id}`}
+                  className="text-orange-500 hover:underline font-mono font-medium">
+                  {req.contract_name || contract?.name || req.contract_id}
                 </Link>
-              </div>
-            )}
+              </span>
+              <span>·</span>
+              <span className="font-mono">{req.created_at}</span>
+            </div>
           </div>
 
-          {/* Diff viewer */}
-          {req.diff && req.diff.changes.length > 0 && (
-            <div className="card p-6">
-              <h3 className="text-sm font-bold text-gray-700 mb-4">Mudancas (Diff)</h3>
-              <div className="text-xs text-gray-400 mb-3">
-                {req.diff.version_from ? `${req.diff.version_from} → ` : 'Nova → '}
-                {req.diff.version_to}
-              </div>
-              <div className="space-y-2">
-                {req.diff.changes.map((c, i) => (
-                  <div key={i} className="flex items-start gap-3 bg-gray-50 rounded-lg p-3">
-                    <span className="text-xs font-mono text-gray-500 bg-gray-200 rounded px-1.5 py-0.5 shrink-0">{c.field}</span>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-mono text-gray-300 line-through break-all">{JSON.stringify(c.from)}</div>
-                      <div className="text-xs font-mono text-green-700 break-all">{JSON.stringify(c.to)}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+          {/* Admin actions */}
+          {user?.role === 'admin' && req.status === 'OPEN' && (
+            <div className="flex flex-col gap-2 shrink-0">
+              <button onClick={handleApprove} disabled={submitting}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-green-600 hover:bg-green-500 transition-colors disabled:opacity-50">
+                ✓ Aprovar
+              </button>
+              <button onClick={() => setShowRejectForm(v => !v)}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-50 transition-colors">
+                ✕ Rejeitar
+              </button>
+              {showRejectForm && (
+                <div className="w-64">
+                  <textarea value={rejectText} onChange={e => setRejectText(e.target.value)}
+                    rows={3} placeholder="Justificativa..."
+                    className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-red-400 resize-none mb-2" />
+                  <button onClick={handleReject} disabled={submitting || !rejectText.trim()}
+                    className="w-full px-3 py-2 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-500 disabled:opacity-50">
+                    Confirmar Rejeição
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Comments */}
-          <div className="card p-6">
-            <h3 className="text-sm font-bold text-gray-700 mb-4">Comentarios ({req.comments?.length || 0})</h3>
-
-            {req.comments?.length > 0 ? (
-              <div className="space-y-3 mb-4">
-                {req.comments.map((c, i) => (
-                  <div key={i} className="bg-gray-50 rounded-xl p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-semibold text-gray-700">{c.author}</span>
-                      <span className="text-[10px] text-gray-400 font-mono">{c.date}</span>
-                    </div>
-                    <div className="text-sm text-gray-600">{c.text}</div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-sm text-gray-400 mb-4">Nenhum comentario ainda</div>
-            )}
-
-            {/* Add comment */}
-            <div className="flex items-start gap-3">
-              <textarea
-                value={comment}
-                onChange={e => setComment(e.target.value)}
-                placeholder="Adicionar comentario..."
-                rows={2}
-                className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:border-brand resize-none"
-              />
-              <div className="flex flex-col gap-2">
-                <button
-                  onClick={handleComment}
-                  disabled={submitting || !comment.trim()}
-                  className="btn-primary text-xs disabled:opacity-40"
-                >
-                  Comentar
-                </button>
-              </div>
+          {(req.status === 'APPROVED' || req.status === 'REJECTED') && (
+            <div className="text-xs text-gray-400 italic shrink-0">
+              {req.status === 'APPROVED'
+                ? `Aprovado em ${req.updated_at}`
+                : `Rejeitado em ${req.updated_at}`}
             </div>
+          )}
+        </div>
+      </div>
+
+      {/* Diff visual */}
+      {changes.length > 0 && (
+        <div className="card overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+            <h2 className="text-sm font-bold text-gray-800">Diff Visual</h2>
+            <div className="flex items-center gap-2 text-xs text-gray-400 font-mono">
+              {req.diff?.version_from && (
+                <><span>v{req.diff.version_from}</span><span>→</span></>
+              )}
+              <span>v{req.diff?.version_to}</span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 divide-x divide-gray-100 text-xs font-mono">
+            <div className="px-5 py-2.5 bg-gray-50 text-gray-500 font-semibold">
+              Versão atual{req.diff?.version_from ? ` (${req.diff.version_from})` : ''}
+            </div>
+            <div className="px-5 py-2.5 bg-gray-50 text-gray-500 font-semibold">
+              Versão proposta ({req.diff?.version_to})
+            </div>
+
+            {changes.map((c, i) => {
+              const op = diffOp(c);
+              if (op === 'remove') return (
+                <>
+                  <div key={`${i}l`} className="px-5 py-2.5 bg-red-50 text-red-700 flex items-center gap-2 border-t border-red-100">
+                    <span className="text-red-500 font-bold text-sm">−</span>
+                    <span>{c.field} {String(c.from)}</span>
+                  </div>
+                  <div key={`${i}r`} className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">campo removido</div>
+                </>
+              );
+              if (op === 'add') return (
+                <>
+                  <div key={`${i}l`} className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">campo adicionado</div>
+                  <div key={`${i}r`} className="px-5 py-2.5 bg-green-50 text-green-700 flex items-center gap-2 border-t border-green-100">
+                    <span className="text-green-500 font-bold text-sm">+</span>
+                    <span>{c.field} {String(c.to)}</span>
+                  </div>
+                </>
+              );
+              return (
+                <>
+                  <div key={`${i}l`} className="px-5 py-2.5 bg-amber-50 text-amber-700 flex items-center gap-2 border-t border-amber-100">
+                    <span className="text-amber-500 font-bold text-sm">~</span>
+                    <span>{c.field} = {String(c.from)}</span>
+                  </div>
+                  <div key={`${i}r`} className="px-5 py-2.5 bg-amber-50 text-amber-800 flex items-center gap-2 border-t border-amber-100">
+                    <span className="text-amber-500 font-bold text-sm">~</span>
+                    <span>{c.field} = {String(c.to)}</span>
+                  </div>
+                </>
+              );
+            })}
+          </div>
+
+          <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50">
+            <p className="text-xs text-gray-400">
+              {removes.length > 0 && <span className="text-red-500 font-semibold">{removes.length} campo(s) removido(s)</span>}
+              {removes.length > 0 && (adds.length > 0 || mods.length > 0) && ' · '}
+              {adds.length > 0 && <span className="text-green-600 font-semibold">{adds.length} campo(s) adicionado(s)</span>}
+              {adds.length > 0 && mods.length > 0 && ' · '}
+              {mods.length > 0 && <span className="text-amber-600 font-semibold">{mods.length} propriedade(s) modificada(s)</span>}
+            </p>
           </div>
         </div>
+      )}
 
-        {/* Sidebar - Actions */}
-        <div>
-          <div className="card p-5">
-            <h3 className="text-sm font-bold text-gray-700 mb-4">Acoes</h3>
+      {/* Comments */}
+      <div className="card overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h2 className="text-sm font-bold text-gray-800">Comentários</h2>
+        </div>
 
-            {req.status === 'OPEN' && user?.role === 'admin' && (
-              <div className="space-y-3">
-                <button
-                  onClick={handleApprove}
-                  disabled={submitting}
-                  className="w-full py-2.5 rounded-xl bg-green-500 text-white text-sm font-bold hover:bg-green-600 transition-colors disabled:opacity-40"
-                >
-                  {submitting ? 'Aprovando...' : 'Aprovar'}
-                </button>
-                <button
-                  onClick={handleReject}
-                  disabled={submitting || !comment.trim()}
-                  className="w-full py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:bg-red-600 transition-colors disabled:opacity-40"
-                >
-                  {submitting ? 'Rejeitando...' : 'Rejeitar'}
-                </button>
-                {!comment.trim() && (
-                  <div className="text-[10px] text-gray-400 text-center">Adicione um comentario para rejeitar</div>
-                )}
+        {req.comments?.length > 0 ? (
+          <div className="divide-y divide-gray-100">
+            {req.comments.map((c, i) => (
+              <div key={i} className="px-5 py-4 flex gap-3">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5"
+                  style={{ background: 'linear-gradient(135deg,#FF6200,#E05200)' }}>
+                  {c.author[0]}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-sm font-semibold text-gray-800">{c.author}</span>
+                    <span className="text-xs text-gray-400 font-mono">{c.date}</span>
+                  </div>
+                  <p className="text-sm text-gray-600">{c.text}</p>
+                </div>
               </div>
-            )}
-
-            {req.status !== 'OPEN' && (
-              <div className="text-sm text-gray-400 text-center py-4">
-                Esta solicitacao ja foi {req.status === 'APPROVED' ? 'aprovada' : 'rejeitada'}.
-              </div>
-            )}
-
-            {user?.role !== 'admin' && req.status === 'OPEN' && (
-              <div className="text-sm text-gray-400 text-center py-4">
-                Apenas administradores podem aprovar ou rejeitar.
-              </div>
-            )}
+            ))}
           </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center py-8 text-gray-300">
+            <p className="text-sm">Nenhum comentário ainda</p>
+          </div>
+        )}
 
-          {/* Contract link card */}
-          {contract && (
-            <div className="card p-5 mt-4">
-              <h3 className="text-sm font-bold text-gray-700 mb-3">Contrato</h3>
-              <Link to={`/contracts/${contract.id}`} className="text-sm font-semibold text-brand hover:underline">
-                {contract.name}
-              </Link>
-              <div className="text-xs text-gray-400 mt-1">{contract.id}</div>
+        <div className="px-5 py-4 border-t border-gray-100 bg-gray-50/30">
+          <div className="flex gap-3">
+            <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 mt-1"
+              style={{ background: 'linear-gradient(135deg,#FF6200,#E05200)' }}>
+              {user?.name?.[0] ?? '?'}
             </div>
-          )}
+            <div className="flex-1 flex gap-2">
+              <input value={commentText} onChange={e => setCommentText(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleComment(); }}
+                placeholder="Adicionar comentário..." required
+                className="flex-1 bg-white border border-gray-200 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100" />
+              <button onClick={handleComment} disabled={submitting || !commentText.trim()}
+                className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110 disabled:opacity-50"
+                style={{ background: 'linear-gradient(135deg,#FF6200,#E05200)' }}>
+                Enviar
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
