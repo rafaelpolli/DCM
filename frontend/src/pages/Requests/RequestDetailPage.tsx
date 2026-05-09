@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { fetchRequest, approveRequest, rejectRequest, addComment } from '../../api/dcm';
 import { useAuthStore } from '../../store/authStore';
@@ -223,34 +223,34 @@ export function RequestDetailPage() {
             {changes.map((c, i) => {
               const op = diffOp(c);
               if (op === 'remove') return (
-                <>
-                  <div key={`${i}l`} className="px-5 py-2.5 bg-red-50 text-red-700 flex items-center gap-2 border-t border-red-100">
+                <Fragment key={i}>
+                  <div className="px-5 py-2.5 bg-red-50 text-red-700 flex items-center gap-2 border-t border-red-100">
                     <span className="text-red-500 font-bold text-sm">−</span>
                     <span>{c.field} {String(c.from)}</span>
                   </div>
-                  <div key={`${i}r`} className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">campo removido</div>
-                </>
+                  <div className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">campo removido</div>
+                </Fragment>
               );
               if (op === 'add') return (
-                <>
-                  <div key={`${i}l`} className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">campo adicionado</div>
-                  <div key={`${i}r`} className="px-5 py-2.5 bg-green-50 text-green-700 flex items-center gap-2 border-t border-green-100">
+                <Fragment key={i}>
+                  <div className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">campo adicionado</div>
+                  <div className="px-5 py-2.5 bg-green-50 text-green-700 flex items-center gap-2 border-t border-green-100">
                     <span className="text-green-500 font-bold text-sm">+</span>
                     <span>{c.field} {String(c.to)}</span>
                   </div>
-                </>
+                </Fragment>
               );
               return (
-                <>
-                  <div key={`${i}l`} className="px-5 py-2.5 bg-amber-50 text-amber-700 flex items-center gap-2 border-t border-amber-100">
+                <Fragment key={i}>
+                  <div className="px-5 py-2.5 bg-amber-50 text-amber-700 flex items-center gap-2 border-t border-amber-100">
                     <span className="text-amber-500 font-bold text-sm">~</span>
                     <span>{c.field} = {String(c.from)}</span>
                   </div>
-                  <div key={`${i}r`} className="px-5 py-2.5 bg-amber-50 text-amber-800 flex items-center gap-2 border-t border-amber-100">
+                  <div className="px-5 py-2.5 bg-amber-50 text-amber-800 flex items-center gap-2 border-t border-amber-100">
                     <span className="text-amber-500 font-bold text-sm">~</span>
                     <span>{c.field} = {String(c.to)}</span>
                   </div>
-                </>
+                </Fragment>
               );
             })}
           </div>
