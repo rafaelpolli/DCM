@@ -2,7 +2,7 @@ import json
 import yaml
 from datetime import date
 from fastapi import FastAPI, Request, Form, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 from typing import List
@@ -12,9 +12,10 @@ from app.mock_data import (
     get_stats, recent_requests,
     next_contract_id, next_request_id,
 )
+from app.agents_engine.main import app as agents_engine_app
 
 app = FastAPI(title="DataContracts")
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory="app/static/"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 # ── auth ───────────────────────────────────────────────────────────────────────
@@ -316,3 +317,13 @@ async def add_comment(request: Request, rid: str, text: str = Form(...)):
     if req and text.strip():
         req["comments"].append({"author": user["name"], "date": str(date.today()), "text": text.strip()})
     return tpl(request, "requests/_comments.html", req=req)
+
+# ── agents studio ──────────────────────────────────────────────────────────────
+@app.get("/agents", response_class=HTMLResponse)
+async def agents_page(request: Request):
+    auth = require_auth(request)
+    if auth: return auth
+    return FileResponse("app/static/agents/index.html")
+
+app.mount("/agents", StaticFiles(directory="app/static/agents"), name="agents_studio")
+app.mount("/api/agents", agents_engine_app, name="agents_engine")

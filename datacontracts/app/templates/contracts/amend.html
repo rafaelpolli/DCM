@@ -1,0 +1,852 @@
+{% extends "base.html" %}
+{% block title %} — Alterar {{ contract.name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-5">
+
+  <!-- Breadcrumb -->
+  <div class="flex items-center gap-2 text-xs text-gray-500">
+    <a href="/contracts" class="hover:text-gray-800 transition-colors">Catálogo</a>
+    <span>/</span>
+    <a href="/contracts/{{ contract.id }}" class="hover:text-gray-800 mono transition-colors">{{ contract.name }}</a>
+    <span>/</span>
+    <span class="text-gray-700">Solicitar Alteração</span>
+  </div>
+
+  <!-- Header -->
+  <div class="card p-5">
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h1 class="text-xl font-semibold text-gray-900">Solicitar Alteração</h1>
+        <p class="text-sm text-gray-500 mono mt-1">{{ contract.name }} · v{{ contract.version }}</p>
+      </div>
+      <a href="/contracts/{{ contract.id }}" class="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg px-3 py-1.5 transition-colors">
+        ← Voltar
+      </a>
+    </div>
+    <div class="mt-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-3">
+      <svg class="w-4 h-4 text-amber-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <p class="text-xs text-amber-700">As alterações não são aplicadas imediatamente — elas geram uma solicitação que precisa ser <strong>aprovada pelo administrador</strong>. Você verá exatamente o que vai mudar antes de confirmar.</p>
+    </div>
+  </div>
+
+  <form method="post" action="/contracts/{{ contract.id }}/amend" id="amend-form">
+    <!-- Hidden state fields -->
+    <input type="hidden" name="diff_json" id="diff_json" value="[]">
+    <input type="hidden" name="dq_rules_json" id="dq_rules_json">
+    <input type="hidden" name="dep_tables_json" id="dep_tables_json">
+    <input type="hidden" name="paired_contract_id" id="paired_contract_id" value="{{ contract.paired_contract_id or '' }}">
+
+    <div class="space-y-3">
+
+    <!-- ── SECTION 1: Identificação ── -->
+    <div class="card overflow-hidden">
+      <button type="button" onclick="toggleSec('s1')"
+        class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50/70 transition-colors">
+        <span class="text-sm font-semibold text-gray-700">1. Identificação</span>
+        <svg id="s1-chevron" class="w-4 h-4 text-gray-400 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div id="s1" class="px-5 pb-5 border-t border-gray-100">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+          <div class="md:col-span-2">
+            <label class="block text-xs text-gray-500 mb-1.5">Nome da tabela *</label>
+            <input name="name" value="{{ contract.name }}" required
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-xs text-gray-500 mb-1.5">Descrição</label>
+            <textarea name="description" rows="2"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 resize-none">{{ contract.description }}</textarea>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Domínio</label>
+            <input name="domain" value="{{ contract.domain }}"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Time</label>
+            <input name="team" value="{{ contract.team }}"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Owner</label>
+            <input name="owner" value="{{ contract.owner }}"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Sistema de origem</label>
+            <input name="source_system" value="{{ contract.source_system }}"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Classificação</label>
+            <select name="data_classification"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              {% for c in ["PUBLIC","INTERNAL","CONFIDENTIAL","RESTRICTED"] %}
+              <option{% if c == contract.data_classification %} selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Tags (vírgula)</label>
+            <input name="tags" value="{{ contract.tags | join(', ') }}"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SECTION 2: Localização & SLA ── -->
+    <div class="card overflow-hidden">
+      <button type="button" onclick="toggleSec('s2')"
+        class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50/70 transition-colors">
+        <span class="text-sm font-semibold text-gray-700">2. Localização & SLA</span>
+        <svg id="s2-chevron" class="w-4 h-4 text-gray-400 transition-transform duration-200 rotate-270" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div id="s2" class="hidden px-5 pb-5 border-t border-gray-100">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Layer</label>
+            <select name="layer" id="amend-layer-select"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              <optgroup label="Arquitetura Medalhão">
+                {% for l in ["RAW","HARM","SPEC"] %}
+                <option value="{{ l }}"{% if l == contract.location.layer %} selected{% endif %}>{{ l }}</option>
+                {% endfor %}
+              </optgroup>
+              <optgroup label="Outras camadas">
+                {% for l in ["BRONZE","SILVER","GOLD"] %}
+                <option value="{{ l }}"{% if l == contract.location.layer %} selected{% endif %}>{{ l }}</option>
+                {% endfor %}
+              </optgroup>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Formato</label>
+            <select name="fmt"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              {% for f in ["PARQUET","DELTA","JSON","CSV","ORC","AVRO"] %}
+              <option{% if f == contract.location.format %} selected{% endif %}>{{ f }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Bucket</label>
+            <input name="bucket" value="{{ contract.location.bucket }}"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Path</label>
+            <input name="path" value="{{ contract.location.path }}"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Compressão</label>
+            <select name="compression"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              {% for c in ["SNAPPY","GZIP","ZSTD","NONE"] %}
+              <option{% if c == contract.location.compression %} selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Freshness</label>
+            <select name="freshness"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              {% for f in ["real-time","hourly","daily","weekly"] %}
+              <option{% if f == contract.sla.freshness %} selected{% endif %}>{{ f }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Latência máxima (min)</label>
+            <input name="max_latency_minutes" type="number" value="{{ contract.sla.max_latency_minutes }}"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Disponibilidade (%)</label>
+            <input name="availability_percent" type="number" step="0.1" value="{{ contract.sla.availability_percent }}"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Retenção (dias)</label>
+            <input name="retention_days" type="number" value="{{ contract.sla.retention_days }}"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">E-mail de alerta</label>
+            <input name="alert_email" type="email" value="{{ contract.sla.alert_email }}"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Estratégia de particionamento</label>
+            <select name="partition_strategy"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+              {% for s in ["DATE","DATE_HOUR","MONTH","YEAR","NONE"] %}
+              <option{% if s == contract.partitioning.strategy %} selected{% endif %}>{{ s }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Coluna de partição</label>
+            <input name="partition_column" value="{{ contract.partitioning.partition_column }}"
+              class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SECTION 3: Schema ── -->
+    <div class="card overflow-hidden">
+      <button type="button" onclick="toggleSec('s3')"
+        class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50/70 transition-colors">
+        <span class="text-sm font-semibold text-gray-700">3. Schema
+          <span class="ml-2 text-xs font-normal text-gray-400">({{ contract.fields | length }} campo(s))</span>
+        </span>
+        <svg id="s3-chevron" class="w-4 h-4 text-gray-400 transition-transform duration-200 rotate-270" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div id="s3" class="hidden px-5 pb-5 border-t border-gray-100 pt-4">
+        <div class="overflow-x-auto mt-4">
+          <table class="w-full text-sm" id="schema-table">
+            <thead>
+              <tr class="text-xs text-gray-500 border-b border-gray-200">
+                <th class="text-left py-2 pr-3">Nome</th>
+                <th class="text-left py-2 pr-3">Tipo</th>
+                <th class="text-left py-2 pr-3">Nullable</th>
+                <th class="text-left py-2 pr-3">PII</th>
+                <th class="text-left py-2 pr-3">Descrição</th>
+                <th class="py-2"></th>
+              </tr>
+            </thead>
+            <tbody id="fields-body">
+              {% for f in contract.fields %}
+              <tr class="field-row border-b border-gray-100">
+                <td class="py-2 pr-2"><input name="field_names" value="{{ f.name }}" class="w-32 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 mono focus:outline-none focus:border-blue-500"/></td>
+                <td class="py-2 pr-2">
+                  <select name="field_types" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+                    {% for t in ["STRING","INTEGER","BIGINT","DECIMAL","FLOAT","BOOLEAN","DATE","TIMESTAMP","MAP","ARRAY"] %}
+                    <option{% if t == f.type %} selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td class="py-2 pr-2">
+                  <select name="field_nullables" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+                    <option value="true"{% if f.nullable %} selected{% endif %}>NULL</option>
+                    <option value="false"{% if not f.nullable %} selected{% endif %}>NOT NULL</option>
+                  </select>
+                </td>
+                <td class="py-2 pr-2">
+                  <select name="field_piis" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+                    {% for p in ["NONE","CPF","EMAIL","NAME","PHONE","IP","DATE"] %}
+                    <option{% if p == f.pii %} selected{% endif %}>{{ p }}</option>
+                    {% endfor %}
+                  </select>
+                </td>
+                <td class="py-2 pr-2"><input name="field_descs" value="{{ f.description or '' }}" class="w-48 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"/></td>
+                <td class="py-2"><button type="button" onclick="removeRow(this)" class="text-gray-400 hover:text-red-500 text-xs px-1">✕</button></td>
+              </tr>
+              {% else %}
+              <tr class="field-row border-b border-gray-100">
+                <td class="py-2 pr-2"><input name="field_names" placeholder="campo" class="w-32 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 mono focus:outline-none focus:border-blue-500"/></td>
+                <td class="py-2 pr-2">
+                  <select name="field_types" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+                    {% for t in ["STRING","INTEGER","BIGINT","DECIMAL","FLOAT","BOOLEAN","DATE","TIMESTAMP","MAP","ARRAY"] %}<option>{{ t }}</option>{% endfor %}
+                  </select>
+                </td>
+                <td class="py-2 pr-2">
+                  <select name="field_nullables" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+                    <option value="true">NULL</option><option value="false">NOT NULL</option>
+                  </select>
+                </td>
+                <td class="py-2 pr-2">
+                  <select name="field_piis" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+                    {% for p in ["NONE","CPF","EMAIL","NAME","PHONE","IP","DATE"] %}<option>{{ p }}</option>{% endfor %}
+                  </select>
+                </td>
+                <td class="py-2 pr-2"><input name="field_descs" placeholder="descrição..." class="w-48 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"/></td>
+                <td class="py-2"><button type="button" onclick="removeRow(this)" class="text-gray-400 hover:text-red-500 text-xs px-1">✕</button></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        <button type="button" onclick="addRow()" class="mt-3 text-xs text-blue-600 hover:underline flex items-center gap-1">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          Adicionar campo
+        </button>
+      </div>
+    </div>
+
+    <!-- ── SECTION 4: Data Quality ── -->
+    <div class="card overflow-hidden">
+      <button type="button" onclick="toggleSec('s4')"
+        class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50/70 transition-colors">
+        <span class="text-sm font-semibold text-gray-700">4. Data Quality
+          <span class="ml-2 text-xs font-normal text-gray-400">({{ (contract.get("data_quality") or []) | length }} regra(s))</span>
+        </span>
+        <svg id="s4-chevron" class="w-4 h-4 text-gray-400 transition-transform duration-200 rotate-270" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div id="s4" class="hidden px-5 pb-5 border-t border-gray-100">
+        <div class="flex items-center justify-between mt-4 mb-3">
+          <p class="text-xs text-gray-400">Regras SodaCore · <span class="text-red-500 font-semibold">CRÍTICO</span> bloqueia · <span class="text-amber-500 font-semibold">ALERTA</span> notifica</p>
+          <button type="button" onclick="toggleDQForm()" class="text-xs font-medium text-white rounded-lg px-3 py-1.5 flex items-center gap-1 shrink-0" style="background:#185FA5">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Adicionar Regra
+          </button>
+        </div>
+
+        <!-- DQ add form (same as form.html) -->
+        <div id="dq-add-form" class="hidden bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Categoria</label>
+              <select id="dq-category" onchange="onDQCategoryChange()"
+                class="w-full bg-white border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                <option value="">Selecione...</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs text-gray-500 mb-1">Check</label>
+              <select id="dq-check" onchange="onDQCheckChange()"
+                class="w-full bg-white border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                <option value="">Selecione a categoria...</option>
+              </select>
+            </div>
+            <div id="dq-col-wrap" class="hidden">
+              <label class="block text-xs text-gray-500 mb-1">Coluna</label>
+              <select id="dq-column"
+                class="w-full bg-white border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+                <option value="">Selecione a coluna...</option>
+              </select>
+            </div>
+          </div>
+          <div id="dq-params-wrap" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+          <div>
+            <label class="block text-xs text-gray-500 mb-1.5">Severidade</label>
+            <div class="flex gap-2">
+              <button type="button" id="sev-critical" onclick="selectSev('CRITICAL')" class="px-4 py-1.5 rounded-lg text-xs font-bold border-2 transition-colors">CRÍTICO</button>
+              <button type="button" id="sev-alert" onclick="selectSev('ALERT')" class="px-4 py-1.5 rounded-lg text-xs font-bold border-2 transition-colors">ALERTA</button>
+            </div>
+          </div>
+          <div class="flex gap-2 pt-1">
+            <button type="button" onclick="addDQRule()" class="px-4 py-1.5 rounded-lg text-xs font-medium text-white" style="background:#185FA5">+ Adicionar à lista</button>
+            <button type="button" onclick="toggleDQForm()" class="px-4 py-1.5 rounded-lg text-xs text-gray-500 border border-gray-300 hover:bg-gray-50">Cancelar</button>
+          </div>
+        </div>
+
+        <div id="dq-empty" class="text-center py-8 text-gray-400 text-sm border border-dashed border-gray-200 rounded-lg">
+          Nenhuma regra. Clique em "Adicionar Regra".
+        </div>
+        <div class="overflow-x-auto hidden" id="dq-table-wrap">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="text-left text-gray-400 border-b border-gray-200">
+                <th class="pb-2 pr-3 font-medium">Categoria</th>
+                <th class="pb-2 pr-3 font-medium">Check</th>
+                <th class="pb-2 pr-3 font-medium">Coluna</th>
+                <th class="pb-2 pr-3 font-medium">Parâmetros</th>
+                <th class="pb-2 pr-3 font-medium">Severidade</th>
+                <th class="pb-2"></th>
+              </tr>
+            </thead>
+            <tbody id="dq-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SECTION 5: Lógica de Negócio (SPEC only) ── -->
+    {% if contract.location.layer == "SPEC" %}
+    <div class="card overflow-hidden">
+      <button type="button" onclick="toggleSec('s5')"
+        class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-gray-50/70 transition-colors">
+        <span class="text-sm font-semibold text-gray-700">5. Lógica de Negócio</span>
+        <svg id="s5-chevron" class="w-4 h-4 text-gray-400 transition-transform duration-200 rotate-270" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+      <div id="s5" class="hidden px-5 pb-5 border-t border-gray-100 space-y-4 pt-4">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1.5">Script SQL</label>
+          <textarea name="business_logic_sql" rows="10"
+            class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded-lg px-3 py-2.5 font-mono focus:outline-none focus:border-blue-500 resize-y">{{ (contract.get("business_logic") or {}).get("sql") or "" }}</textarea>
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="text-xs font-medium text-gray-600">Tabelas dependência</label>
+            <button type="button" onclick="addDep()" class="text-xs text-blue-600 hover:underline flex items-center gap-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              Adicionar
+            </button>
+          </div>
+          <p id="deps-empty" class="text-xs text-gray-400 italic py-1">Nenhuma dependência.</p>
+          <div id="deps-list" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ── Motivo ── -->
+    <div class="card p-5">
+      <label class="block text-sm font-semibold text-gray-700 mb-2">Motivo da alteração *</label>
+      <textarea name="amend_reason" required rows="3" placeholder="Descreva por que essa alteração é necessária..."
+        class="w-full bg-gray-50 border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 resize-none"></textarea>
+    </div>
+
+    <!-- ── Revisar button ── -->
+    <div class="flex justify-end">
+      <button type="button" onclick="reviewChanges()"
+        class="px-6 py-2.5 rounded-lg text-sm font-semibold text-white flex items-center gap-2" style="background:#185FA5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+        </svg>
+        Revisar Alterações
+      </button>
+    </div>
+
+    </div><!-- end space-y-3 -->
+
+    <!-- ── Diff panel ── -->
+    <div id="diff-panel" class="hidden card overflow-hidden mt-5">
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+        <h2 class="text-sm font-bold text-gray-800">Revisão de Alterações</h2>
+        <p class="text-xs text-gray-400 mono" id="diff-version-label"></p>
+      </div>
+      <div id="diff-content" class="text-xs mono"></div>
+      <div class="px-5 py-3 border-t border-gray-100 bg-gray-50/50">
+        <p class="text-xs" id="diff-summary"></p>
+      </div>
+    </div>
+
+    <!-- ── Submit (shown after review) ── -->
+    <div id="submit-area" class="hidden flex items-center justify-between mt-4">
+      <a href="/contracts/{{ contract.id }}" class="px-5 py-2 rounded-lg text-sm font-medium text-gray-600 border border-gray-300 hover:bg-gray-100 transition-colors">
+        Cancelar
+      </a>
+      <button type="submit" onclick="prepareAmendSubmit()"
+        class="px-6 py-2 rounded-lg text-sm font-semibold text-white transition-colors" style="background:#16a34a">
+        Confirmar e Enviar Solicitação →
+      </button>
+    </div>
+
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── STATE ──────────────────────────────────────────────────────────────────────
+const ORIGINAL = {{ contract | tojson }};
+const ALL_CONTRACTS = {{ contracts | tojson }};
+let dqRules = {{ (contract.get("data_quality") or []) | tojson }};
+let depTables = {{ ((contract.get("business_logic") or {}).get("dependencies") or []) | tojson }};
+let isSpec = {{ 'true' if contract.location.layer == 'SPEC' else 'false' }};
+let selectedSev = 'ALERT';
+
+// ── DQ CHECK DEFINITIONS (same as form.html) ───────────────────────────────────
+const DQ = {
+  "Volume": {
+    "row_count": {label:"Contagem de linhas", col:false, params:[
+      {key:"min",label:"Mínimo",type:"number",ph:"1000"},{key:"max",label:"Máximo",type:"number",ph:"opcional"}
+    ]}
+  },
+  "Completude": {
+    "missing_count":   {label:"Qtd valores ausentes",col:true,params:[{key:"max",label:"Máx ausentes",type:"number",ph:"0"}]},
+    "missing_percent": {label:"% valores ausentes",col:true,params:[{key:"max_pct",label:"Máx % (0-100)",type:"number",ph:"5"}]},
+    "missing_values":  {label:"Valores tratados como nulo",col:true,params:[{key:"values",label:"Valores (vírgula)",type:"text",ph:"N/A, null, -"}]},
+    "missing_regex":   {label:"Regex de ausência",col:true,params:[{key:"regex",label:"Regex",type:"text",ph:"^\\s*$"}]}
+  },
+  "Unicidade": {
+    "duplicate_count":   {label:"Qtd duplicatas",col:true,params:[{key:"max",label:"Máx duplicatas",type:"number",ph:"0"}]},
+    "duplicate_percent": {label:"% duplicatas",col:true,params:[{key:"max_pct",label:"Máx % (0-100)",type:"number",ph:"0"}]}
+  },
+  "Validade": {
+    "valid_format":     {label:"Formato padrão",col:true,params:[{key:"format",label:"Formato",type:"select",opts:["email","phone","uuid","ip_address","date","time","datetime","integer","decimal","credit_card","ssn"]}]},
+    "valid_regex":      {label:"Regex customizado",col:true,params:[{key:"regex",label:"Regex válido",type:"text",ph:""}]},
+    "valid_values":     {label:"Enum de valores aceitos",col:true,params:[{key:"values",label:"Valores aceitos (vírgula)",type:"text",ph:"ACTIVE, INACTIVE"}]},
+    "invalid_values":   {label:"Valores proibidos",col:true,params:[{key:"values",label:"Valores proibidos (vírgula)",type:"text",ph:"NULL, N/A"}]},
+    "valid_min":        {label:"Valor mínimo numérico",col:true,params:[{key:"min",label:"Mínimo",type:"number",ph:"0"}]},
+    "valid_max":        {label:"Valor máximo numérico",col:true,params:[{key:"max",label:"Máximo",type:"number",ph:""}]},
+    "valid_min_length": {label:"Tamanho mínimo (string)",col:true,params:[{key:"min_length",label:"Mínimo chars",type:"number",ph:"1"}]},
+    "valid_max_length": {label:"Tamanho máximo (string)",col:true,params:[{key:"max_length",label:"Máximo chars",type:"number",ph:"255"}]}
+  },
+  "Distribuição": {
+    "min":        {label:"Mínimo da coluna",col:true,params:[{key:"threshold",label:"Threshold mínimo",type:"number",ph:""}]},
+    "max":        {label:"Máximo da coluna",col:true,params:[{key:"threshold",label:"Threshold máximo",type:"number",ph:""}]},
+    "avg":        {label:"Média da coluna",col:true,params:[{key:"min",label:"Média mínima",type:"number",ph:""},{key:"max",label:"Média máxima",type:"number",ph:""}]},
+    "sum":        {label:"Soma da coluna",col:true,params:[{key:"min",label:"Soma mínima",type:"number",ph:""},{key:"max",label:"Soma máxima",type:"number",ph:""}]},
+    "stddev":     {label:"Desvio padrão",col:true,params:[{key:"max",label:"Desvio máximo",type:"number",ph:""}]},
+    "variance":   {label:"Variância",col:true,params:[{key:"max",label:"Variância máxima",type:"number",ph:""}]},
+    "percentile": {label:"Percentil",col:true,params:[{key:"percentile",label:"Percentil",type:"select",opts:["p25","p50","p75","p95","p99"]},{key:"threshold",label:"Valor threshold",type:"number",ph:""}]}
+  },
+  "Frescor": {
+    "freshness": {label:"Frescor dos dados",col:true,params:[{key:"max_age",label:"Idade máxima (ex: 8h, 1d)",type:"text",ph:"24h"}]}
+  },
+  "Schema": {
+    "schema_column_exists": {label:"Colunas obrigatórias existem",col:false,params:[{key:"columns",label:"Colunas (vírgula)",type:"text",ph:"id, name"}]},
+    "schema_column_type":   {label:"Tipo de coluna correto",col:true,params:[{key:"expected_type",label:"Tipo esperado",type:"text",ph:"STRING"}]},
+    "schema_no_extra":      {label:"Sem colunas extras",col:false,params:[{key:"columns",label:"Colunas permitidas (vírgula)",type:"text",ph:""}]}
+  },
+  "Integridade Referencial": {
+    "reference": {label:"Integridade referencial",col:true,params:[
+      {key:"ref_dataset",label:"Dataset referência",type:"text",ph:"harm.tb_customers"},
+      {key:"ref_column",label:"Coluna referência",type:"text",ph:"customer_id"}
+    ]}
+  },
+  "SQL Customizado": {
+    "failed_rows":  {label:"Linhas inválidas (SQL)",col:false,params:[{key:"sql",label:"SQL (retorna linhas inválidas)",type:"textarea",ph:"SELECT * FROM {table} WHERE amount < 0"}]},
+    "user_defined": {label:"Métrica customizada (SQL)",col:false,params:[{key:"sql",label:"SQL (retorna número)",type:"textarea",ph:"SELECT COUNT(*) FROM {table} WHERE status IS NULL"},{key:"threshold",label:"Threshold",type:"number",ph:"0"}]}
+  }
+};
+
+// ── ACCORDION ─────────────────────────────────────────────────────────────────
+function toggleSec(id) {
+  const el = document.getElementById(id);
+  const ch = document.getElementById(id + '-chevron');
+  const open = el.classList.toggle('hidden');
+  ch.style.transform = el.classList.contains('hidden') ? 'rotate(-90deg)' : '';
+}
+
+// ── SCHEMA ────────────────────────────────────────────────────────────────────
+const TYPES = ["STRING","INTEGER","BIGINT","DECIMAL","FLOAT","BOOLEAN","DATE","TIMESTAMP","MAP","ARRAY"];
+const PIIS  = ["NONE","CPF","EMAIL","NAME","PHONE","IP","DATE"];
+
+function fieldRowHTML(f={}) {
+  const to = TYPES.map(t=>`<option${t===(f.type||'STRING')?' selected':''}>${t}</option>`).join('');
+  const po = PIIS.map(p=>`<option${p===(f.pii||'NONE')?' selected':''}>${p}</option>`).join('');
+  return `<tr class="field-row border-b border-gray-100">
+    <td class="py-2 pr-2"><input name="field_names" value="${f.name||''}" placeholder="campo" class="w-32 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 mono focus:outline-none focus:border-blue-500"/></td>
+    <td class="py-2 pr-2"><select name="field_types" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">${to}</select></td>
+    <td class="py-2 pr-2"><select name="field_nullables" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">
+      <option value="true"${f.nullable!==false?' selected':''}>NULL</option>
+      <option value="false"${f.nullable===false?' selected':''}>NOT NULL</option>
+    </select></td>
+    <td class="py-2 pr-2"><select name="field_piis" class="bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500">${po}</select></td>
+    <td class="py-2 pr-2"><input name="field_descs" value="${f.description||''}" placeholder="descrição..." class="w-48 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded px-2 py-1.5 focus:outline-none focus:border-blue-500"/></td>
+    <td class="py-2"><button type="button" onclick="removeRow(this)" class="text-gray-400 hover:text-red-500 text-xs px-1">✕</button></td>
+  </tr>`;
+}
+function addRow() { document.getElementById('fields-body').insertAdjacentHTML('beforeend', fieldRowHTML()); }
+function removeRow(btn) { btn.closest('tr').remove(); }
+
+// ── DQ ────────────────────────────────────────────────────────────────────────
+const catEl = document.getElementById('dq-category');
+Object.keys(DQ).forEach(cat => {
+  const o = document.createElement('option'); o.value=cat; o.textContent=cat; catEl.appendChild(o);
+});
+
+function getSchemaFieldNames() {
+  return Array.from(document.querySelectorAll('#fields-body input[name="field_names"]'))
+    .map(i => i.value.trim()).filter(Boolean);
+}
+
+function buildColSelect() {
+  const cols = getSchemaFieldNames();
+  const sel = document.getElementById('dq-column');
+  if (cols.length === 0) {
+    sel.innerHTML = '<option value="">— Defina campos no Schema primeiro —</option>';
+    sel.disabled = true;
+  } else {
+    sel.disabled = false;
+    sel.innerHTML = '<option value="">Selecione a coluna...</option>' +
+      cols.map(c => `<option value="${c}">${c}</option>`).join('');
+  }
+}
+
+function toggleDQForm() {
+  const f = document.getElementById('dq-add-form');
+  f.classList.toggle('hidden');
+  if (!f.classList.contains('hidden')) {
+    document.getElementById('dq-category').value='';
+    document.getElementById('dq-check').innerHTML='<option value="">Selecione a categoria...</option>';
+    document.getElementById('dq-col-wrap').classList.add('hidden');
+    buildColSelect();
+    document.getElementById('dq-params-wrap').innerHTML='';
+    selectSev('ALERT');
+  }
+}
+
+function onDQCategoryChange() {
+  const cat = document.getElementById('dq-category').value;
+  const ck = document.getElementById('dq-check');
+  ck.innerHTML='<option value="">Selecione o check...</option>';
+  if (cat && DQ[cat]) Object.entries(DQ[cat]).forEach(([k,d]) => {
+    const o=document.createElement('option'); o.value=k; o.textContent=d.label||k; ck.appendChild(o);
+  });
+  document.getElementById('dq-col-wrap').classList.add('hidden');
+  document.getElementById('dq-params-wrap').innerHTML='';
+}
+
+function onDQCheckChange() {
+  const cat=document.getElementById('dq-category').value;
+  const chk=document.getElementById('dq-check').value;
+  if (!cat||!chk) return;
+  const def=DQ[cat]?.[chk]; if (!def) return;
+  document.getElementById('dq-col-wrap').classList.toggle('hidden', !def.col);
+  if (def.col) buildColSelect();
+  const pw = document.getElementById('dq-params-wrap');
+  pw.innerHTML = def.params.map(p => {
+    let inp;
+    if (p.type==='select') inp=`<select id="dqp-${p.key}" class="w-full bg-white border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">${p.opts.map(o=>`<option>${o}</option>`).join('')}</select>`;
+    else if (p.type==='textarea') inp=`<textarea id="dqp-${p.key}" rows="3" placeholder="${p.ph||''}" class="w-full bg-white border border-gray-300 text-gray-800 text-xs rounded-lg px-3 py-2 font-mono focus:outline-none focus:border-blue-500 resize-none"></textarea>`;
+    else inp=`<input id="dqp-${p.key}" type="${p.type}" placeholder="${p.ph||''}" class="w-full bg-white border border-gray-300 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"/>`;
+    return `<div><label class="block text-xs text-gray-500 mb-1">${p.label}</label>${inp}</div>`;
+  }).join('');
+}
+
+function selectSev(sev) {
+  selectedSev=sev;
+  const cr=document.getElementById('sev-critical'), al=document.getElementById('sev-alert');
+  if (sev==='CRITICAL') {
+    cr.style.cssText='background:#ef4444;color:#fff;border-color:#ef4444';
+    al.style.cssText='background:#fff;color:#6b7280;border-color:#d1d5db';
+  } else {
+    al.style.cssText='background:#f59e0b;color:#fff;border-color:#f59e0b';
+    cr.style.cssText='background:#fff;color:#6b7280;border-color:#d1d5db';
+  }
+}
+
+function addDQRule() {
+  const cat=document.getElementById('dq-category').value;
+  const chk=document.getElementById('dq-check').value;
+  if (!cat||!chk) { alert('Selecione categoria e check.'); return; }
+  const def=DQ[cat][chk];
+  const col=def.col ? document.getElementById('dq-column').value.trim() : '';
+  if (def.col && !col) { alert('Selecione uma coluna. Se não há opções, defina os campos no Schema primeiro.'); return; }
+  const params={};
+  def.params.forEach(p => { const el=document.getElementById(`dqp-${p.key}`); if(el) params[p.key]=el.value.trim(); });
+  dqRules.push({category:cat,check:chk,column:col,params,severity:selectedSev});
+  renderDQTable(); toggleDQForm();
+}
+
+function removeDQRule(idx) { dqRules.splice(idx,1); renderDQTable(); }
+
+function renderDQTable() {
+  const empty=document.getElementById('dq-empty');
+  const wrap=document.getElementById('dq-table-wrap');
+  const tbody=document.getElementById('dq-table-body');
+  if (!dqRules.length) { empty.classList.remove('hidden'); wrap.classList.add('hidden'); return; }
+  empty.classList.add('hidden'); wrap.classList.remove('hidden');
+  tbody.innerHTML=dqRules.map((r,i) => {
+    const ps=Object.entries(r.params||{}).filter(([,v])=>v).map(([k,v])=>`${k}:${v}`).join(' · ');
+    const sc=r.severity==='CRITICAL'?'color:#dc2626;background:#fef2f2':'color:#d97706;background:#fffbeb';
+    return `<tr class="border-b border-gray-100">
+      <td class="py-2 pr-3 text-gray-600">${r.category}</td>
+      <td class="py-2 pr-3 mono text-gray-800 text-xs">${r.check}</td>
+      <td class="py-2 pr-3 mono text-gray-500">${r.column||'—'}</td>
+      <td class="py-2 pr-3 text-gray-400 text-xs">${ps||'—'}</td>
+      <td class="py-2 pr-3"><span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold mono" style="${sc}">${r.severity}</span></td>
+      <td class="py-2"><button type="button" onclick="removeDQRule(${i})" class="text-gray-400 hover:text-red-500">✕</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── DEPS ──────────────────────────────────────────────────────────────────────
+function addDep() { depTables.push({table:'',contract_id:''}); renderDeps(); }
+function removeDep(idx) { depTables.splice(idx,1); renderDeps(); }
+function renderDeps() {
+  const empty=document.getElementById('deps-empty');
+  const list=document.getElementById('deps-list');
+  if (!list) return;
+  if (!depTables.length) { empty.classList.remove('hidden'); list.innerHTML=''; return; }
+  empty.classList.add('hidden');
+  const copts=ALL_CONTRACTS.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  list.innerHTML=depTables.map((d,i)=>`
+    <div class="flex items-center gap-2">
+      <input value="${d.table||''}" onchange="depTables[${i}].table=this.value" placeholder="schema.table_name"
+        class="flex-1 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded-lg px-3 py-2 mono focus:outline-none focus:border-blue-500"/>
+      <select onchange="depTables[${i}].contract_id=this.value"
+        class="flex-1 bg-gray-50 border border-gray-300 text-gray-800 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500">
+        <option value="">— Contrato (opcional) —</option>${copts}
+      </select>
+      <button type="button" onclick="removeDep(${i})" class="text-gray-400 hover:text-red-500 text-xs shrink-0">✕</button>
+    </div>`).join('');
+}
+
+// ── DIFF ──────────────────────────────────────────────────────────────────────
+function collectProposed() {
+  const sv = name => document.querySelector(`[name="${name}"]`)?.value || '';
+  const fieldRows = Array.from(document.querySelectorAll('#fields-body .field-row'));
+  const fields = fieldRows.map(row => ({
+    name:  row.querySelector('[name="field_names"]').value.trim(),
+    type:  row.querySelector('[name="field_types"]').value,
+    nullable: row.querySelector('[name="field_nullables"]').value === 'true',
+    pii:   row.querySelector('[name="field_piis"]').value,
+    description: row.querySelector('[name="field_descs"]').value,
+  })).filter(f => f.name);
+
+  return {
+    name: sv('name'), description: sv('description'), domain: sv('domain'),
+    team: sv('team'), owner: sv('owner'), source_system: sv('source_system'),
+    data_classification: sv('data_classification'),
+    tags: sv('tags').split(',').map(t=>t.trim()).filter(Boolean),
+    location: {
+      layer: document.getElementById('amend-layer-select').value,
+      bucket: sv('bucket'), path: sv('path'),
+      format: sv('fmt'), compression: sv('compression'),
+    },
+    sla: {
+      freshness: sv('freshness'),
+      max_latency_minutes: parseFloat(sv('max_latency_minutes')),
+      availability_percent: parseFloat(sv('availability_percent')),
+      retention_days: parseInt(sv('retention_days')),
+      alert_email: sv('alert_email'),
+    },
+    partitioning: { strategy: sv('partition_strategy'), partition_column: sv('partition_column') },
+    fields,
+    data_quality: dqRules,
+    business_logic: isSpec ? { sql: sv('business_logic_sql'), dependencies: depTables } : ORIGINAL.business_logic,
+  };
+}
+
+function computeDiff(orig, proposed) {
+  const changes = [];
+
+  const flat = [
+    ['name','Nome'],['description','Descrição'],['domain','Domínio'],
+    ['team','Time'],['owner','Owner'],['source_system','Sistema de origem'],
+    ['data_classification','Classificação'],
+  ];
+  for (const [k,l] of flat) {
+    if ((orig[k]||'') !== (proposed[k]||''))
+      changes.push({op:'modify', field:l, old:orig[k]||'—', new:proposed[k]||'—'});
+  }
+
+  const origTags = (orig.tags||[]).slice().sort().join(', ');
+  const newTags  = (proposed.tags||[]).slice().sort().join(', ');
+  if (origTags !== newTags) changes.push({op:'modify', field:'Tags', old:origTags||'—', new:newTags||'—'});
+
+  const locF = [['layer','Layer'],['bucket','Bucket'],['path','Path'],['format','Formato'],['compression','Compressão']];
+  for (const [k,l] of locF) {
+    if ((orig.location?.[k]||'') !== (proposed.location?.[k]||''))
+      changes.push({op:'modify', field:`Localização / ${l}`, old:orig.location?.[k]||'—', new:proposed.location?.[k]||'—'});
+  }
+
+  const slaF = [['freshness','Freshness'],['max_latency_minutes','Latência (min)'],
+                ['availability_percent','Disponibilidade (%)'],['retention_days','Retenção (dias)'],['alert_email','Email alerta']];
+  for (const [k,l] of slaF) {
+    if (String(orig.sla?.[k]??'') !== String(proposed.sla?.[k]??''))
+      changes.push({op:'modify', field:`SLA / ${l}`, old:String(orig.sla?.[k]??'—'), new:String(proposed.sla?.[k]??'—')});
+  }
+
+  const partF = [['strategy','Estratégia'],['partition_column','Coluna']];
+  for (const [k,l] of partF) {
+    if ((orig.partitioning?.[k]||'') !== (proposed.partitioning?.[k]||''))
+      changes.push({op:'modify', field:`Particionamento / ${l}`, old:orig.partitioning?.[k]||'—', new:proposed.partitioning?.[k]||'—'});
+  }
+
+  const origFNames = new Set((orig.fields||[]).map(f=>f.name));
+  const newFNames  = new Set((proposed.fields||[]).map(f=>f.name));
+  for (const f of (proposed.fields||[])) {
+    if (!origFNames.has(f.name)) {
+      changes.push({op:'add', field:`Campo: ${f.name}`, new:`${f.type}${f.nullable?'':' NOT NULL'}`});
+    } else {
+      const of_ = (orig.fields||[]).find(x=>x.name===f.name);
+      if (of_ && of_.type !== f.type)
+        changes.push({op:'modify', field:`Campo: ${f.name} (tipo)`, old:of_.type, new:f.type});
+      if (of_ && of_.pii !== f.pii)
+        changes.push({op:'modify', field:`Campo: ${f.name} (PII)`, old:of_.pii, new:f.pii});
+    }
+  }
+  for (const f of (orig.fields||[])) {
+    if (!newFNames.has(f.name))
+      changes.push({op:'remove', field:`Campo: ${f.name}`, old:f.type});
+  }
+
+  const origDQLen = (orig.data_quality||[]).length;
+  const newDQLen  = (proposed.data_quality||[]).length;
+  if (origDQLen !== newDQLen)
+    changes.push({op:'modify', field:'Data Quality / Total de regras', old:String(origDQLen), new:String(newDQLen)});
+
+  const origSQL = orig.business_logic?.sql || '';
+  const newSQL  = proposed.business_logic?.sql || '';
+  if (origSQL !== newSQL)
+    changes.push({op:'modify', field:'SQL / Lógica de negócio', old: origSQL ? '(script anterior)' : '(vazio)', new: newSQL ? '(script atualizado)' : '(vazio)'});
+
+  return changes;
+}
+
+function renderDiffPanel(changes) {
+  const panel = document.getElementById('diff-panel');
+  const content = document.getElementById('diff-content');
+  const summary = document.getElementById('diff-summary');
+  const submitArea = document.getElementById('submit-area');
+
+  if (!changes.length) {
+    content.innerHTML = `<div class="px-5 py-8 text-center text-gray-400 text-sm col-span-2">Nenhuma alteração detectada.</div>`;
+    summary.innerHTML = `<span class="text-gray-400">Sem alterações.</span>`;
+    submitArea.classList.add('hidden');
+    panel.classList.remove('hidden');
+    return;
+  }
+
+  const headerRow = `<div class="px-4 py-2.5 bg-gray-50 text-gray-500 font-semibold border-b border-gray-100">Versão atual (${ORIGINAL.version})</div>
+    <div class="px-4 py-2.5 bg-gray-50 text-gray-500 font-semibold border-b border-gray-100">Proposta</div>`;
+
+  const rows = changes.map(c => {
+    if (c.op === 'remove') return `
+      <div class="px-4 py-2.5 bg-red-50 text-red-700 flex items-center gap-2 border-t border-red-100">
+        <span class="text-red-500 font-bold">−</span><span>${c.field}: ${c.old}</span>
+      </div>
+      <div class="px-4 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">campo removido</div>`;
+    if (c.op === 'add') return `
+      <div class="px-4 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">campo adicionado</div>
+      <div class="px-4 py-2.5 bg-green-50 text-green-700 flex items-center gap-2 border-t border-green-100">
+        <span class="text-green-500 font-bold">+</span><span>${c.field}: ${c.new}</span>
+      </div>`;
+    return `
+      <div class="px-4 py-2.5 bg-amber-50 text-amber-700 flex items-center gap-2 border-t border-amber-100">
+        <span class="font-bold">~</span><span>${c.field} = ${c.old}</span>
+      </div>
+      <div class="px-4 py-2.5 bg-amber-50 text-amber-800 flex items-center gap-2 border-t border-amber-100">
+        <span class="font-bold">~</span><span>${c.field} = ${c.new}</span>
+      </div>`;
+  }).join('');
+
+  content.innerHTML = `<div class="grid grid-cols-2 divide-x divide-gray-100">${headerRow}${rows}</div>`;
+
+  const removes = changes.filter(c=>c.op==='remove').length;
+  const adds    = changes.filter(c=>c.op==='add').length;
+  const mods    = changes.filter(c=>c.op==='modify').length;
+  const parts = [];
+  if (removes) parts.push(`<span class="text-red-500 font-semibold">${removes} remoção(ões)</span>`);
+  if (adds)    parts.push(`<span class="text-green-600 font-semibold">${adds} adição(ões)</span>`);
+  if (mods)    parts.push(`<span class="text-amber-600 font-semibold">${mods} modificação(ões)</span>`);
+  summary.innerHTML = parts.join(' · ');
+
+  panel.classList.remove('hidden');
+  submitArea.classList.remove('hidden');
+  panel.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function reviewChanges() {
+  const proposed = collectProposed();
+  const changes  = computeDiff(ORIGINAL, proposed);
+  renderDiffPanel(changes);
+  document.getElementById('diff_json').value = JSON.stringify(changes);
+  const vp = document.getElementById('diff-version-label');
+  if (vp) vp.textContent = `v${ORIGINAL.version} → v${ORIGINAL.version.replace(/\.(\d+)\./, (_, n) => `.${+n+1}.`)}`;
+}
+
+function prepareAmendSubmit() {
+  document.getElementById('dq_rules_json').value = JSON.stringify(dqRules);
+  document.getElementById('dep_tables_json').value = JSON.stringify(depTables);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+selectSev('ALERT');
+renderDQTable();
+renderDeps();
+</script>
+{% endblock %}

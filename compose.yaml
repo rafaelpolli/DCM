@@ -1,0 +1,17 @@
+services:
+  dcm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: datacontract-manager
+    restart: unless-stopped
+    environment:
+      DCM_DATABASE_PATH: /app/data/dcm.sqlite3
+    ports:
+      - "80:8000"
+    volumes:
+      - dcm_data:/app/data
+
+volumes:
+  dcm_data:
+    name: dcm_sqlite_data

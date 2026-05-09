@@ -1,0 +1,79 @@
+{% set bl = contract.get("business_logic") or {} %}
+
+<div class="space-y-5">
+
+  {% if not bl or (not bl.get("sql") and not bl.get("dependencies")) %}
+  <div class="card p-10 text-center text-gray-400">
+    <svg class="w-10 h-10 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+    </svg>
+    <p class="text-sm">Nenhuma lógica de negócio definida.</p>
+    <p class="text-xs mt-1">Disponível apenas para contratos da camada SPEC.</p>
+  </div>
+
+  {% else %}
+
+  <!-- SQL Script -->
+  {% if bl.get("sql") %}
+  <div class="card p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Script SQL</h3>
+      <button onclick="copySQL()" class="text-xs text-gray-400 hover:text-gray-700 border border-gray-200 rounded px-2 py-1 transition-colors">
+        Copiar
+      </button>
+    </div>
+    <pre id="sql-block" class="bg-gray-900 text-green-400 text-xs rounded-lg p-4 overflow-x-auto font-mono leading-relaxed whitespace-pre-wrap">{{ bl.sql }}</pre>
+  </div>
+  {% endif %}
+
+  <!-- Dependencies -->
+  {% set deps = bl.get("dependencies") or [] %}
+  <div class="card p-5">
+    <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">
+      Tabelas dependência
+      <span class="ml-2 text-gray-400 font-normal normal-case">({{ deps | length }})</span>
+    </h3>
+    {% if deps %}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-xs text-gray-400 border-b border-gray-100">
+            <th class="text-left py-2 pr-6 font-medium">Tabela</th>
+            <th class="text-left py-2 font-medium">Contrato vinculado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for dep in deps %}
+          <tr class="border-b border-gray-100 hover:bg-gray-50/50 transition-colors">
+            <td class="py-3 pr-6 mono text-gray-800 text-xs">{{ dep.table or "—" }}</td>
+            <td class="py-3 text-xs">
+              {% if dep.contract_id %}
+              <a href="/contracts/{{ dep.contract_id }}" class="text-blue-600 hover:underline mono">
+                {{ dep.contract_id }}
+              </a>
+              {% else %}
+              <span class="text-gray-400">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="text-xs text-gray-400 italic">Nenhuma dependência registrada.</p>
+    {% endif %}
+  </div>
+
+  {% endif %}
+</div>
+
+<script>
+function copySQL() {
+  const el = document.getElementById('sql-block');
+  if (!el) return;
+  navigator.clipboard.writeText(el.textContent).then(() => {
+    if (typeof showToast === 'function') showToast('SQL copiado!');
+  });
+}
+</script>
