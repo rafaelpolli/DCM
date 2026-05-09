@@ -9,6 +9,9 @@ import { ContractCreatePage } from './pages/Contracts/ContractCreatePage';
 import { RequestsListPage } from './pages/Requests/RequestsListPage';
 import { RequestDetailPage } from './pages/Requests/RequestDetailPage';
 import { StudioPage } from './pages/Studio/StudioPage';
+import { EvalPage } from './pages/Eval/EvalPage';
+import { TracesPage } from './pages/Traces/TracesPage';
+import { DeploymentsPage } from './pages/Deployments/DeploymentsPage';
 
 export default function App() {
   return (
@@ -23,6 +26,9 @@ export default function App() {
           <Route path="/requests" element={<RequestsListPage />} />
           <Route path="/requests/:id" element={<RequestDetailPage />} />
           <Route path="/agents" element={<StudioPage />} />
+          <Route path="/eval" element={<EvalPage />} />
+          <Route path="/traces" element={<TracesPage />} />
+          <Route path="/deployments" element={<DeploymentsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

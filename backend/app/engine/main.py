@@ -4,17 +4,22 @@ from __future__ import annotations
 import io
 import json
 import os
+import time
 from datetime import datetime, timezone
 from typing import Literal
 
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from .eval import EvalRequest, EvalResult, run_eval
 from .integrations.git import GitHubClient, GitLabClient, GitProviderError
 from .models.graph import Project
 from .pipeline import bundler, observability
+from .pipeline.cicd_generator import generate_cicd
 from .pipeline.compiler.compiler import compile_graph
 from .pipeline.iac_generator import generate_iac
 from .pipeline.local_scaffold import generate_local_scaffold
@@ -29,12 +34,6 @@ app = FastAPI(
 
 
 def _cors_origins() -> list[str]:
-    """Comma-separated list of allowed origins. Defaults to local Vite ports.
-
-    Set CORS_ORIGINS at deploy time, e.g.:
-        CORS_ORIGINS=https://agents-studio.pages.dev,https://studio.example.com
-    Use '*' to allow any origin (do not combine with credentials).
-    """
     raw = os.environ.get("CORS_ORIGINS", "").strip()
     if not raw:
         return ["http://localhost:5173", "http://localhost:4173"]
@@ -56,10 +55,6 @@ def health():
 
 @app.post("/validate")
 def validate_graph(project: Project) -> dict:
-    """Validate a graph DAG without generating code.
-
-    Returns validation errors as structured JSON suitable for Studio inline markers.
-    """
     result = validate(project)
     return {
         "valid": result.valid,
@@ -69,12 +64,6 @@ def validate_graph(project: Project) -> dict:
 
 @app.post("/generate")
 def generate(project: Project) -> StreamingResponse:
-    """Validate the graph and generate a deployable ZIP bundle.
-
-    Returns a ZIP file download containing Python agent code, Terraform IaC,
-    pytest tests, local simulation scripts, and project.json for re-import.
-    """
-    # Phase 1 — Validate
     validation = validate(project)
     if not validation.valid:
         raise HTTPException(
@@ -85,22 +74,13 @@ def generate(project: Project) -> StreamingResponse:
             },
         )
 
-    # Phase 2 — Compile graph → Python agent package
     artifacts = compile_graph(project, validation.sorted_nodes)
-
-    # Phase 3 — IaC
     artifacts.merge(generate_iac(project, validation.sorted_nodes))
-
-    # Phase 4 — Tests
     artifacts.merge(generate_tests(project))
-
-    # Phase 5 — Local scaffold (Dockerfile, pyproject.toml, local/ scripts, .env.example)
     artifacts.merge(generate_local_scaffold(project))
-
-    # Phase 6 — Observability injection
     observability.inject_observability(project, artifacts)
+    artifacts.merge(generate_cicd(project))  # Phase 8
 
-    # Phase 7 — ZIP bundle
     zip_bytes = bundler.bundle(project, artifacts)
 
     agent_name = project.name.lower().replace(" ", "-")
@@ -114,10 +94,245 @@ def generate(project: Project) -> StreamingResponse:
     )
 
 
-# ─────────────────────────────────────────────────────────────────────────
-# Git integration — push generated repos and pull project.json from
-# GitHub/GitLab. Tokens (PATs) are passed per-request and never persisted.
-# ─────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Evaluation — text-overlap metrics (exact_match, token_f1, context_relevance,
+# answer_faithfulness). No external ML deps required.
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.post("/eval/run")
+def eval_run(req: EvalRequest) -> EvalResult:
+    """Evaluate a batch of question/answer/context rows against ground truth.
+
+    Returns per-row metrics (exact_match, token_f1, context_relevance,
+    answer_faithfulness) and aggregate averages.
+    """
+    if not req.rows:
+        raise HTTPException(status_code=422, detail={"message": "rows must not be empty"})
+    return run_eval(req)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Preview — run a single agent node against Bedrock without generating a ZIP.
+# Requires AWS credentials configured on the engine host (env or IAM role).
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PreviewRequest(BaseModel):
+    model_id: str = Field("anthropic.claude-3-5-haiku-20241022-v1:0")
+    system_prompt: str = Field("You are a helpful AI assistant.")
+    temperature: float = Field(0.7, ge=0.0, le=1.0)
+    max_tokens: int = Field(1024, ge=1, le=8192)
+    input_text: str = Field(..., min_length=1)
+    aws_region: str = Field("us-east-1")
+
+
+class PreviewResult(BaseModel):
+    response: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: int
+
+
+@app.post("/preview")
+def preview_node(req: PreviewRequest) -> PreviewResult:
+    """Invoke a Bedrock model with a system prompt and user input.
+
+    Used by the Studio prompt-tester panel. Requires the engine to have
+    AWS credentials with bedrock:InvokeModel permission.
+    """
+    try:
+        client = boto3.client("bedrock-runtime", region_name=req.aws_region)
+        body = {
+            "anthropic_version": "bedrock-2023-05-31",
+            "system": req.system_prompt,
+            "messages": [{"role": "user", "content": req.input_text}],
+            "max_tokens": req.max_tokens,
+            "temperature": req.temperature,
+        }
+        t0 = time.perf_counter()
+        resp = client.invoke_model(
+            modelId=req.model_id,
+            body=json.dumps(body),
+            contentType="application/json",
+            accept="application/json",
+        )
+        latency_ms = int((time.perf_counter() - t0) * 1000)
+        payload = json.loads(resp["body"].read())
+        text = payload.get("content", [{}])[0].get("text", "")
+        usage = payload.get("usage", {})
+        return PreviewResult(
+            response=text,
+            input_tokens=usage.get("input_tokens", 0),
+            output_tokens=usage.get("output_tokens", 0),
+            latency_ms=latency_ms,
+        )
+    except (BotoCoreError, ClientError) as e:
+        raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Test plan — compile graph and return generated test file contents without
+# executing them. Execution happens locally via `uv run pytest tests/`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestPlanResult(BaseModel):
+    files: dict[str, str]
+    tool_count: int
+
+
+@app.post("/run-tests")
+def run_tests(project: Project) -> TestPlanResult:
+    """Generate and return the pytest files for the project without executing them.
+
+    The Studio shows these as a "test plan" preview. Actual execution:
+        uv run pytest tests/ -v
+    inside the extracted agent ZIP.
+    """
+    validation = validate(project)
+    if not validation.valid:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Graph validation failed",
+                "errors": [e.to_dict() for e in validation.errors],
+            },
+        )
+    test_artifacts = generate_tests(project)
+    tool_nodes = [n for n in project.nodes if n.is_tool()]
+    return TestPlanResult(
+        files=dict(test_artifacts.files),
+        tool_count=len(tool_nodes),
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Traces — query CloudWatch Logs Insights for AgentCore observability spans.
+# Credentials are passed per-request and never persisted.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TracesRequest(BaseModel):
+    aws_access_key_id: str
+    aws_secret_access_key: str
+    aws_session_token: str | None = None
+    aws_region: str = "us-east-1"
+    agent_name: str
+    minutes: int = Field(60, ge=1, le=1440)
+
+
+class TraceSpan(BaseModel):
+    timestamp: str
+    span_type: str
+    message: str
+    duration_ms: int | None = None
+
+
+class TracesResult(BaseModel):
+    spans: list[TraceSpan]
+    log_group: str
+    query_window_minutes: int
+
+
+@app.post("/traces/query")
+def query_traces(req: TracesRequest) -> TracesResult:
+    """Query CloudWatch Logs Insights for AgentCore genai observability spans."""
+    log_group = f"/aws/bedrock/agentcore/{req.agent_name}"
+    try:
+        logs = boto3.client(
+            "logs",
+            region_name=req.aws_region,
+            aws_access_key_id=req.aws_access_key_id,
+            aws_secret_access_key=req.aws_secret_access_key,
+            aws_session_token=req.aws_session_token,
+        )
+        end_time = int(time.time())
+        start_time = end_time - req.minutes * 60
+
+        resp = logs.start_query(
+            logGroupName=log_group,
+            startTime=start_time,
+            endTime=end_time,
+            queryString=(
+                "fields @timestamp, @message, span_type, duration_ms "
+                "| filter ispresent(span_type) "
+                "| sort @timestamp desc "
+                "| limit 200"
+            ),
+        )
+        query_id = resp["queryId"]
+
+        # Poll until complete (max 10s)
+        for _ in range(20):
+            time.sleep(0.5)
+            status_resp = logs.get_query_results(queryId=query_id)
+            if status_resp["status"] in ("Complete", "Failed", "Cancelled"):
+                break
+
+        spans: list[TraceSpan] = []
+        for row in status_resp.get("results", []):
+            fields = {f["field"]: f["value"] for f in row}
+            spans.append(TraceSpan(
+                timestamp=fields.get("@timestamp", ""),
+                span_type=fields.get("span_type", "unknown"),
+                message=fields.get("@message", ""),
+                duration_ms=int(fields["duration_ms"]) if fields.get("duration_ms") else None,
+            ))
+
+        return TracesResult(
+            spans=spans,
+            log_group=log_group,
+            query_window_minutes=req.minutes,
+        )
+    except (BotoCoreError, ClientError) as e:
+        raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Deployments — get AgentCore Runtime status.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class DeploymentStatusRequest(BaseModel):
+    aws_access_key_id: str
+    aws_secret_access_key: str
+    aws_session_token: str | None = None
+    aws_region: str = "us-east-1"
+    agent_runtime_id: str
+
+
+class DeploymentStatusResult(BaseModel):
+    agent_runtime_id: str
+    status: str
+    endpoint: str | None = None
+    created_at: str | None = None
+    last_updated_at: str | None = None
+    raw: dict
+
+
+@app.post("/deployments/status")
+def deployment_status(req: DeploymentStatusRequest) -> DeploymentStatusResult:
+    """Get AgentCore Runtime status for a deployed agent."""
+    try:
+        agentcore = boto3.client(
+            "bedrock-agentcore-control",
+            region_name=req.aws_region,
+            aws_access_key_id=req.aws_access_key_id,
+            aws_secret_access_key=req.aws_secret_access_key,
+            aws_session_token=req.aws_session_token,
+        )
+        resp = agentcore.get_agent_runtime(agentRuntimeId=req.agent_runtime_id)
+        return DeploymentStatusResult(
+            agent_runtime_id=req.agent_runtime_id,
+            status=resp.get("status", "UNKNOWN"),
+            endpoint=resp.get("agentRuntimeEndpoint"),
+            created_at=str(resp.get("createdAt", "")),
+            last_updated_at=str(resp.get("lastUpdatedAt", "")),
+            raw={k: str(v) for k, v in resp.items() if k != "ResponseMetadata"},
+        )
+    except (BotoCoreError, ClientError) as e:
+        raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Git integration
+# ─────────────────────────────────────────────────────────────────────────────
 
 GitProvider = Literal["github", "gitlab"]
 
@@ -149,9 +364,6 @@ def _make_provider(req: GitPushRequest | GitPullRequest):
 
 @app.post("/git/push")
 def git_push(req: GitPushRequest) -> dict:
-    """Validate the project, run the full code-gen pipeline, and commit
-    every generated file to the target repo branch in one atomic commit.
-    """
     validation = validate(req.project)
     if not validation.valid:
         raise HTTPException(
@@ -167,6 +379,7 @@ def git_push(req: GitPushRequest) -> dict:
     artifacts.merge(generate_tests(req.project))
     artifacts.merge(generate_local_scaffold(req.project))
     observability.inject_observability(req.project, artifacts)
+    artifacts.merge(generate_cicd(req.project))
 
     files = dict(artifacts.files)
     files["project.json"] = bundler._project_json(req.project)
@@ -192,10 +405,6 @@ def git_push(req: GitPushRequest) -> dict:
 
 @app.post("/git/pull")
 def git_pull(req: GitPullRequest) -> dict:
-    """Read project.json (or another file) from the repo at the given ref.
-
-    Returns the parsed Project so the Studio can hydrate the canvas.
-    """
     try:
         raw = _make_provider(req).get_file(req.path, req.ref)
     except GitProviderError as e:
@@ -224,4 +433,4 @@ try:
     from mangum import Mangum
     handler = Mangum(app, lifespan="off")
 except ImportError:
-    handler = None  # running locally via uvicorn
+    handler = None

@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { fetchContract, fetchRequests } from '../../api/dcm';
 import { useAuthStore } from '../../store/authStore';
 import { StatusBadge } from '../../components/shared/StatusBadge';
 import type { Contract, ChangeRequest } from '../../types/dcm';
 import { ExportModal } from './ExportModal';
+import { useGraphStore } from '../../store/graphStore';
+import type { AgentNode, AgentEdge } from '../../types/graph';
 
 export function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -15,6 +17,9 @@ export function ContractDetailPage() {
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('overview');
   const [showExport, setShowExport] = useState(false);
+  const loadProject = useGraphStore(s => s.loadProject);
+  const setProjectName = useGraphStore(s => s.setProjectName);
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!token || !id) return;
@@ -80,6 +85,70 @@ export function ContractDetailPage() {
           </Link>
           <button onClick={() => setShowExport(true)} className="text-sm font-semibold text-gray-600 hover:text-brand transition-colors border border-gray-200 rounded-lg px-4 py-2">
             Exportar
+          </button>
+          <button
+            onClick={() => {
+              if (!contract) return;
+              const agentName = contract.name.toLowerCase().replace(/\s+/g, '-') + '-agent';
+
+              // Build a starter canvas wired to the contract's data source
+              const inputNode: AgentNode = {
+                id: 'input-1', type: 'input', label: 'Input',
+                position: { x: 80, y: 220 },
+                config: { trigger: 'http', 'http.method': 'POST', 'http.path': '/invoke', 'http.auth': 'none' },
+                ports: { inputs: [], outputs: [{ id: 'payload', name: 'Payload', data_type: 'json' }] },
+              };
+              const s3Node: AgentNode = {
+                id: 's3-1', type: 'tool_s3', label: `Read ${contract.name}`,
+                position: { x: 320, y: 120 },
+                config: {
+                  name: `read_${contract.name.toLowerCase().replace(/\s+/g, '_')}`,
+                  description: `Read data from ${contract.name} (${contract.location.layer} layer)`,
+                  operation: 'read',
+                  bucket: contract.location.bucket,
+                  key_template: contract.location.path,
+                },
+                ports: {
+                  inputs: [{ id: 'input', name: 'Input', data_type: 'any', required: true }],
+                  outputs: [{ id: 'output', name: 'Output', data_type: 'any' }],
+                },
+              };
+              const agentNode: AgentNode = {
+                id: 'agent-1', type: 'agent', label: `${contract.name} Agent`,
+                position: { x: 560, y: 220 },
+                config: {
+                  model_id: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+                  system_prompt: `You are an expert data analyst for the "${contract.name}" dataset (${contract.domain} domain, ${contract.data_classification} classification). Use the provided data to answer questions accurately.`,
+                  temperature: 0.3,
+                  max_tokens: 4096,
+                  streaming: false,
+                  tools: ['s3-1'],
+                  memory: { enabled: false, namespace: 'default', top_k: 5, ttl_seconds: 3600 },
+                },
+                ports: {
+                  inputs: [{ id: 'message', name: 'User message', data_type: 'any', required: true }, { id: 'context', name: 'Context', data_type: 'any' }],
+                  outputs: [{ id: 'response', name: 'Agent response', data_type: 'string' }, { id: 'tool_calls', name: 'Tool calls log', data_type: 'json' }],
+                },
+              };
+              const outputNode: AgentNode = {
+                id: 'output-1', type: 'output', label: 'Response',
+                position: { x: 800, y: 220 },
+                config: { mode: 'json', status_code: 200 },
+                ports: { inputs: [{ id: 'payload', name: 'Payload', data_type: 'any', required: true }], outputs: [] },
+              };
+
+              const edges: AgentEdge[] = [
+                { id: 'e1', source_node_id: 'input-1', source_port_id: 'payload', target_node_id: 'agent-1', target_port_id: 'message', data_type: 'any' },
+                { id: 'e2', source_node_id: 'agent-1', source_port_id: 'response', target_node_id: 'output-1', target_port_id: 'payload', data_type: 'string' },
+              ];
+
+              loadProject({ name: agentName, nodes: [inputNode, s3Node, agentNode, outputNode], edges });
+              setProjectName(agentName);
+              navigate('/agents');
+            }}
+            className="text-sm font-semibold text-brand border border-brand rounded-lg px-4 py-2 hover:bg-orange-50 transition-colors"
+          >
+            🤖 Gerar Agente
           </button>
         </div>
       </div>

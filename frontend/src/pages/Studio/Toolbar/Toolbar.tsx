@@ -1,10 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useGraphStore } from '../../../store/graphStore';
 import { useAuthStore } from '../../../store/authStore';
 import { validateGraph, generateZip, checkEngineHealth } from '../../../api/engine';
 import { importAgentZip, ImportError } from '../../../api/import';
 import { HelpPanel } from '../Help/HelpPanel';
 import { GitPanel } from '../GitPanel/GitPanel';
+import { CostEstimatorPanel } from '../CostEstimator/CostEstimatorPanel';
 
 type EngineHealth = 'unknown' | 'ok' | 'down';
 
@@ -54,6 +56,8 @@ export function Toolbar() {
   const [errorMsg, setErrorMsg] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
   const [gitOpen, setGitOpen] = useState(false);
+  const [costOpen, setCostOpen] = useState(false);
+  const navigate = useNavigate();
   const [engineHealth, setEngineHealth] = useState<EngineHealth>('unknown');
   const [healthError, setHealthError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -196,6 +200,16 @@ export function Toolbar() {
         <span>⬆</span> Import ZIP
       </button>
 
+      <button onClick={() => navigate('/eval')} title="Evaluate agent outputs with metrics"
+        className={btnCls}>
+        <span>📊</span> Eval
+      </button>
+
+      <button onClick={() => setCostOpen(true)} title="Estimate monthly AWS cost for this graph"
+        className={btnCls}>
+        <span>💰</span> Cost
+      </button>
+
       <button onClick={() => setGitOpen(true)} disabled={status === 'validating' || status === 'generating'}
         title="Push generated repo to GitHub/GitLab, or pull project.json back" className={btnCls}>
         <span>🔀</span> Git
@@ -218,6 +232,7 @@ export function Toolbar() {
 
       {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
       {gitOpen && <GitPanel onClose={() => setGitOpen(false)} />}
+      {costOpen && <CostEstimatorPanel onClose={() => setCostOpen(false)} />}
     </header>
   );
 }

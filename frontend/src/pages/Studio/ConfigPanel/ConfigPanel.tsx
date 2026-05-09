@@ -1,4 +1,5 @@
 import { useCallback, useMemo, Suspense, lazy } from 'react';
+import { PromptTesterPanel } from '../PromptTester/PromptTesterPanel';
 import { useGraphStore } from '../../../store/graphStore';
 import { NODE_CATALOG, type FieldDef, type NodeRefFilter } from '../../../nodes/catalog';
 import type { AgentNode, NodeType } from '../../../types/graph';
@@ -337,6 +338,11 @@ export function ConfigPanel() {
               if (selectedNodeId) updateNodeLabel(selectedNodeId, label);
             }}
           />
+        )}
+
+        {/* Prompt tester — only for agent nodes */}
+        {(node.type === 'agent') && (
+          <PromptTesterPanel node={node} />
         )}
       </div>
     </aside>

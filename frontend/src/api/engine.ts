@@ -64,3 +64,127 @@ export async function generateZip(project: Project, token: string): Promise<void
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+// ── Preview (Inline Prompt Tester) ───────────────────────────────────────────
+
+export interface PreviewRequest {
+  model_id: string;
+  system_prompt: string;
+  temperature: number;
+  max_tokens: number;
+  input_text: string;
+  aws_region: string;
+}
+
+export interface PreviewResult {
+  response: string;
+  input_tokens: number;
+  output_tokens: number;
+  latency_ms: number;
+}
+
+export async function previewNode(req: PreviewRequest, token: string): Promise<PreviewResult> {
+  const res = await fetch(`${API_BASE}/agents/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const msg = (body as { detail?: { message?: string } }).detail?.message ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<PreviewResult>;
+}
+
+// ── Test plan ────────────────────────────────────────────────────────────────
+
+export interface TestPlanResult {
+  files: Record<string, string>;
+  tool_count: number;
+}
+
+export async function getTestPlan(project: Project, token: string): Promise<TestPlanResult> {
+  const res = await fetch(`${API_BASE}/agents/run-tests`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(project),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const msg = (body as { detail?: { message?: string } }).detail?.message ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<TestPlanResult>;
+}
+
+// ── Traces ───────────────────────────────────────────────────────────────────
+
+export interface TracesRequest {
+  aws_access_key_id: string;
+  aws_secret_access_key: string;
+  aws_session_token?: string;
+  aws_region: string;
+  agent_name: string;
+  minutes: number;
+}
+
+export interface TraceSpan {
+  timestamp: string;
+  span_type: string;
+  message: string;
+  duration_ms: number | null;
+}
+
+export interface TracesResult {
+  spans: TraceSpan[];
+  log_group: string;
+  query_window_minutes: number;
+}
+
+export async function queryTraces(req: TracesRequest, token: string): Promise<TracesResult> {
+  const res = await fetch(`${API_BASE}/agents/traces/query`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const msg = (body as { detail?: { message?: string } }).detail?.message ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<TracesResult>;
+}
+
+// ── Deployments ──────────────────────────────────────────────────────────────
+
+export interface DeploymentStatusRequest {
+  aws_access_key_id: string;
+  aws_secret_access_key: string;
+  aws_session_token?: string;
+  aws_region: string;
+  agent_runtime_id: string;
+}
+
+export interface DeploymentStatusResult {
+  agent_runtime_id: string;
+  status: string;
+  endpoint: string | null;
+  created_at: string | null;
+  last_updated_at: string | null;
+  raw: Record<string, string>;
+}
+
+export async function getDeploymentStatus(req: DeploymentStatusRequest, token: string): Promise<DeploymentStatusResult> {
+  const res = await fetch(`${API_BASE}/agents/deployments/status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const msg = (body as { detail?: { message?: string } }).detail?.message ?? `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return res.json() as Promise<DeploymentStatusResult>;
+}
