@@ -48,6 +48,7 @@ export function Toolbar() {
   const setProjectName = useGraphStore((s) => s.setProjectName);
   const getProject = useGraphStore((s) => s.getProject);
   const loadProject = useGraphStore((s) => s.loadProject);
+  const resetCanvas = useGraphStore((s) => s.resetCanvas);
   const setValidationErrors = useGraphStore((s) => s.setValidationErrors);
   const clearValidation = useGraphStore((s) => s.clearValidation);
   const validationErrors = useGraphStore((s) => s.validationErrors);
@@ -136,6 +137,14 @@ export function Toolbar() {
     [loadProject],
   );
 
+  const onBackToTemplates = useCallback(() => {
+    if (hasContent) {
+      const ok = window.confirm('Voltar para templates descartará o trabalho atual. Continuar?');
+      if (!ok) return;
+    }
+    resetCanvas();
+  }, [hasContent, resetCanvas]);
+
   const onTestPlan = useCallback(async () => {
     setStatus('validating');
     setErrorMsg('');
@@ -176,6 +185,17 @@ export function Toolbar() {
 
   return (
     <header className="h-12 bg-white border-b border-gray-200 flex items-center px-4 gap-3 flex-shrink-0">
+      <button
+        onClick={onBackToTemplates}
+        title="Voltar para templates"
+        className="flex items-center gap-1 px-2 py-1 rounded-lg text-sm text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+      >
+        <span>←</span>
+        <span className="hidden sm:inline text-xs font-medium">Templates</span>
+      </button>
+
+      <div className="w-px h-6 bg-gray-200" />
+
       {/* Logo / brand */}
       <div className="flex items-center gap-2 mr-2">
         <span className="text-lg">🤖</span>

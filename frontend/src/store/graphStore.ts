@@ -41,6 +41,7 @@ interface GraphStore {
   getSelectedAgentNode: () => AgentNode | null;
 
   loadProject: (project: Project) => void;
+  resetCanvas: () => void;
 }
 
 export const useGraphStore = create<GraphStore>((set, get) => ({
@@ -185,6 +186,17 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
       selectedNodeId: null,
       validationErrors: [],
       canvasReady: true,
+    });
+  },
+
+  resetCanvas: () => {
+    set({
+      nodes: [],
+      edges: [],
+      projectName: 'untitled-agent',
+      selectedNodeId: null,
+      validationErrors: [],
+      canvasReady: false,
     });
   },
 }));
