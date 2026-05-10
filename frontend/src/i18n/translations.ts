@@ -15,7 +15,7 @@ export const translations = {
       agents: 'Agentes',
       eval: 'Avaliação',
       traces: 'Traces',
-      deployments: 'Deploy',
+      deployments: 'Catálogo',
     },
     login: {
       access_account: 'Acesse sua conta',
@@ -170,7 +170,7 @@ export const translations = {
       agents: 'Agentes',
       eval: 'Evaluación',
       traces: 'Trazas',
-      deployments: 'Deploy',
+      deployments: 'Catálogo',
     },
     login: {
       access_account: 'Accede a tu cuenta',

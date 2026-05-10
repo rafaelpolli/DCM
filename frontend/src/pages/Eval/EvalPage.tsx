@@ -1,6 +1,11 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { runEval, type EvalRow, type EvalResult } from '../../api/eval';
 import { useAuthStore } from '../../store/authStore';
+import { useAwsCredsStore } from '../../store/awsCredentialsStore';
+import { listAgentRuntimes, type AgentRuntimeSummary } from '../../api/engine';
+
+type EvalMode = 'manual' | 'invoke';
 
 const METRIC_LABELS: Record<string, string> = {
   exact_match: 'Exact Match',
@@ -79,11 +84,34 @@ function ScoreBar({ value, color }: { value: number; color: string }) {
 
 export function EvalPage() {
   const { token } = useAuthStore();
+  const creds = useAwsCredsStore();
+  const [searchParams] = useSearchParams();
+  const initialArn = searchParams.get('agent') ?? '';
+  const initialName = searchParams.get('name') ?? '';
+
+  const [mode, setMode] = useState<EvalMode>(initialArn ? 'invoke' : 'manual');
+  const [agentArn, setAgentArn] = useState(initialArn);
+  const [agentName, setAgentName] = useState(initialName);
+  const [agents, setAgents] = useState<AgentRuntimeSummary[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(false);
+
   const [rows, setRows] = useState<EvalRow[]>([EMPTY_ROW()]);
   const [result, setResult] = useState<EvalResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (mode !== 'invoke' || !token) return;
+    setAgentsLoading(true);
+    listAgentRuntimes(
+      { aws_region: creds.region, aws_access_key_id: creds.accessKeyId, aws_secret_access_key: creds.secretAccessKey, aws_session_token: creds.sessionToken },
+      token,
+    )
+      .then(res => setAgents(res.agents))
+      .catch(() => setAgents([]))
+      .finally(() => setAgentsLoading(false));
+  }, [mode, token, creds.region, creds.accessKeyId, creds.secretAccessKey, creds.sessionToken]);
 
   const handleCSVLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -115,8 +143,32 @@ export function EvalPage() {
   const removeRow = (i: number) => setRows(prev => prev.filter((_, idx) => idx !== i));
 
   const handleSubmit = async () => {
+    if (mode === 'invoke') {
+      if (!agentArn.trim()) { setError('Selecione ou cole o ARN do agente.'); return; }
+      const valid = rows.filter(r => r.question.trim());
+      if (!valid.length) { setError('Adicione ao menos uma linha com pergunta.'); return; }
+      setLoading(true);
+      setError('');
+      setResult(null);
+      try {
+        const res = await runEval(valid, token!, {
+          agentRuntimeArn: agentArn.trim(),
+          awsRegion: creds.region,
+          awsAccessKeyId: creds.accessKeyId,
+          awsSecretAccessKey: creds.secretAccessKey,
+          awsSessionToken: creds.sessionToken,
+        });
+        setResult(res);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     const valid = rows.filter(r => r.question.trim() && r.answer.trim());
-    if (!valid.length) { setError('Add at least one row with question and answer.'); return; }
+    if (!valid.length) { setError('Adicione ao menos uma linha com pergunta e resposta.'); return; }
     setLoading(true);
     setError('');
     setResult(null);
@@ -168,6 +220,71 @@ export function EvalPage() {
             {loading ? 'Running...' : '▶ Run Evaluation'}
           </button>
         </div>
+      </div>
+
+      {/* Mode toggle */}
+      <div className="card p-4 mb-6">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setMode('manual')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${mode === 'manual' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Manual paste
+            </button>
+            <button
+              onClick={() => setMode('invoke')}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${mode === 'invoke' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Invoke deployed agent
+            </button>
+          </div>
+
+          {mode === 'invoke' && (
+            <div className="flex items-center gap-2 flex-1 min-w-[300px]">
+              {agents.length > 0 ? (
+                <select
+                  value={agentArn}
+                  onChange={e => {
+                    setAgentArn(e.target.value);
+                    const sel = agents.find(a => a.agent_runtime_arn === e.target.value);
+                    setAgentName(sel?.name ?? '');
+                  }}
+                  className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-900 font-mono focus:outline-none focus:border-brand"
+                >
+                  <option value="">— escolha o agente —</option>
+                  {agents.map(a => (
+                    <option key={a.agent_runtime_arn} value={a.agent_runtime_arn}>
+                      {a.name} ({a.status})
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="text"
+                  value={agentArn}
+                  onChange={e => setAgentArn(e.target.value)}
+                  placeholder="arn:aws:bedrock-agentcore:us-east-1:...:agent-runtime/..."
+                  className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-900 font-mono focus:outline-none focus:border-brand"
+                />
+              )}
+              {agentsLoading && <span className="text-xs text-gray-400">carregando...</span>}
+            </div>
+          )}
+        </div>
+
+        {mode === 'invoke' && agents.length === 0 && !agentsLoading && (
+          <p className="text-xs text-gray-500 mt-3">
+            Nenhum agente carregado.{' '}
+            <Link to="/agents-catalog" className="text-brand hover:underline">Configure no Catálogo de Agentes →</Link>{' '}
+            ou cole o ARN manualmente acima.
+          </p>
+        )}
+        {mode === 'invoke' && agentName && (
+          <p className="text-xs text-gray-500 mt-2">
+            Agente: <span className="font-mono text-gray-700">{agentName}</span>
+          </p>
+        )}
       </div>
 
       {error && (
@@ -227,16 +344,18 @@ export function EvalPage() {
                   placeholder="Paris"
                 />
               </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Answer (from agent)</label>
-                <textarea
-                  rows={3}
-                  className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:border-brand resize-none"
-                  value={row.answer}
-                  onChange={e => updateRow(i, 'answer', e.target.value)}
-                  placeholder="The capital of France is Paris."
-                />
-              </div>
+              {mode === 'manual' && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Answer (from agent)</label>
+                  <textarea
+                    rows={3}
+                    className="w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:border-brand resize-none"
+                    value={row.answer}
+                    onChange={e => updateRow(i, 'answer', e.target.value)}
+                    placeholder="The capital of France is Paris."
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Retrieved Context <span className="text-gray-400 font-normal">(optional, one chunk per line)</span></label>
                 <textarea
@@ -251,13 +370,26 @@ export function EvalPage() {
 
             {/* Per-row results */}
             {result?.rows[i] && (
-              <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-4 gap-3">
-                {metricKeys.map(k => (
-                  <div key={k}>
-                    <div className="text-xs text-gray-400 mb-1">{METRIC_LABELS[k]}</div>
-                    <ScoreBar value={(result.rows[i] as unknown as Record<string, number>)[k] ?? 0} color={METRIC_COLORS[k]} />
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                {result.rows[i].agent_response != null && (
+                  <div className="mb-3 bg-blue-50 border border-blue-100 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-semibold text-blue-700">Agent response</span>
+                      {result.rows[i].latency_ms != null && (
+                        <span className="text-xs font-mono text-blue-500">{result.rows[i].latency_ms}ms</span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-700 whitespace-pre-wrap">{result.rows[i].agent_response}</p>
                   </div>
-                ))}
+                )}
+                <div className="grid grid-cols-4 gap-3">
+                  {metricKeys.map(k => (
+                    <div key={k}>
+                      <div className="text-xs text-gray-400 mb-1">{METRIC_LABELS[k]}</div>
+                      <ScoreBar value={(result.rows[i] as unknown as Record<string, number>)[k] ?? 0} color={METRIC_COLORS[k]} />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>

@@ -48,6 +48,20 @@ app.add_middleware(
 )
 
 
+def _boto_client(service: str, req: BaseModel):
+    """Build a boto3 client. Uses explicit creds from request if provided, else IAM role / env chain."""
+    region = getattr(req, "aws_region", "us-east-1")
+    kwargs: dict = {"region_name": region}
+    access_key = getattr(req, "aws_access_key_id", None)
+    if access_key:
+        kwargs["aws_access_key_id"] = access_key
+        kwargs["aws_secret_access_key"] = getattr(req, "aws_secret_access_key", None)
+        token = getattr(req, "aws_session_token", None)
+        if token:
+            kwargs["aws_session_token"] = token
+    return boto3.client(service, **kwargs)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
@@ -210,8 +224,8 @@ def test_plan(project: Project) -> TestPlanResult:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TracesRequest(BaseModel):
-    aws_access_key_id: str
-    aws_secret_access_key: str
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
     aws_session_token: str | None = None
     aws_region: str = "us-east-1"
     agent_name: str
@@ -236,13 +250,7 @@ def query_traces(req: TracesRequest) -> TracesResult:
     """Query CloudWatch Logs Insights for AgentCore genai observability spans."""
     log_group = f"/aws/bedrock/agentcore/{req.agent_name}"
     try:
-        logs = boto3.client(
-            "logs",
-            region_name=req.aws_region,
-            aws_access_key_id=req.aws_access_key_id,
-            aws_secret_access_key=req.aws_secret_access_key,
-            aws_session_token=req.aws_session_token,
-        )
+        logs = _boto_client("logs", req)
         end_time = int(time.time())
         start_time = end_time - req.minutes * 60
 
@@ -286,18 +294,66 @@ def query_traces(req: TracesRequest) -> TracesResult:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Deployments — get AgentCore Runtime status.
+# Agents — list, status, invoke (Bedrock AgentCore Runtime).
+# Credentials optional: when omitted, boto3 uses IAM role / env / instance profile.
 # ─────────────────────────────────────────────────────────────────────────────
 
-class DeploymentStatusRequest(BaseModel):
-    aws_access_key_id: str
-    aws_secret_access_key: str
+class _AwsCredsRequest(BaseModel):
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
     aws_session_token: str | None = None
     aws_region: str = "us-east-1"
+
+
+class ListAgentsRequest(_AwsCredsRequest):
+    pass
+
+
+class AgentRuntimeSummary(BaseModel):
+    agent_runtime_id: str
+    agent_runtime_arn: str
+    name: str
+    status: str
+    endpoint: str | None = None
+    created_at: str | None = None
+    last_updated_at: str | None = None
+
+
+class ListAgentsResult(BaseModel):
+    agents: list[AgentRuntimeSummary]
+    using_iam_role: bool
+
+
+@app.post("/runtimes/list")
+def list_agents(req: ListAgentsRequest) -> ListAgentsResult:
+    """List AgentCore Runtimes deployed in the AWS account."""
+    try:
+        agentcore = _boto_client("bedrock-agentcore-control", req)
+        resp = agentcore.list_agent_runtimes()
+        items: list[AgentRuntimeSummary] = []
+        for r in resp.get("agentRuntimes", []):
+            items.append(AgentRuntimeSummary(
+                agent_runtime_id=r.get("agentRuntimeId", ""),
+                agent_runtime_arn=r.get("agentRuntimeArn", ""),
+                name=r.get("agentRuntimeName", r.get("agentRuntimeId", "")),
+                status=r.get("status", "UNKNOWN"),
+                endpoint=r.get("agentRuntimeEndpoint"),
+                created_at=str(r.get("createdAt", "")) or None,
+                last_updated_at=str(r.get("lastUpdatedAt", "")) or None,
+            ))
+        return ListAgentsResult(
+            agents=items,
+            using_iam_role=req.aws_access_key_id is None,
+        )
+    except (BotoCoreError, ClientError) as e:
+        raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+
+
+class AgentStatusRequest(_AwsCredsRequest):
     agent_runtime_id: str
 
 
-class DeploymentStatusResult(BaseModel):
+class AgentStatusResult(BaseModel):
     agent_runtime_id: str
     status: str
     endpoint: str | None = None
@@ -306,19 +362,13 @@ class DeploymentStatusResult(BaseModel):
     raw: dict
 
 
-@app.post("/deployments/status")
-def deployment_status(req: DeploymentStatusRequest) -> DeploymentStatusResult:
-    """Get AgentCore Runtime status for a deployed agent."""
+@app.post("/runtimes/status")
+def agent_status(req: AgentStatusRequest) -> AgentStatusResult:
+    """Get AgentCore Runtime status for a specific deployed agent."""
     try:
-        agentcore = boto3.client(
-            "bedrock-agentcore-control",
-            region_name=req.aws_region,
-            aws_access_key_id=req.aws_access_key_id,
-            aws_secret_access_key=req.aws_secret_access_key,
-            aws_session_token=req.aws_session_token,
-        )
+        agentcore = _boto_client("bedrock-agentcore-control", req)
         resp = agentcore.get_agent_runtime(agentRuntimeId=req.agent_runtime_id)
-        return DeploymentStatusResult(
+        return AgentStatusResult(
             agent_runtime_id=req.agent_runtime_id,
             status=resp.get("status", "UNKNOWN"),
             endpoint=resp.get("agentRuntimeEndpoint"),
@@ -326,6 +376,79 @@ def deployment_status(req: DeploymentStatusRequest) -> DeploymentStatusResult:
             last_updated_at=str(resp.get("lastUpdatedAt", "")),
             raw={k: str(v) for k, v in resp.items() if k != "ResponseMetadata"},
         )
+    except (BotoCoreError, ClientError) as e:
+        raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+
+
+class InvokeAgentRequest(_AwsCredsRequest):
+    agent_runtime_arn: str
+    input_text: str = Field(..., min_length=1)
+    session_id: str | None = None
+    qualifier: str = "DEFAULT"
+
+
+class InvokeAgentResult(BaseModel):
+    response_text: str
+    latency_ms: int
+    session_id: str
+    raw: dict
+
+
+def _invoke_agent(req: InvokeAgentRequest) -> InvokeAgentResult:
+    """Internal helper — invoke an AgentCore runtime, return response text + latency."""
+    import uuid
+    session_id = req.session_id or str(uuid.uuid4())
+    runtime = _boto_client("bedrock-agentcore", req)
+    payload = json.dumps({"prompt": req.input_text, "input": req.input_text}).encode("utf-8")
+    t0 = time.perf_counter()
+    resp = runtime.invoke_agent_runtime(
+        agentRuntimeArn=req.agent_runtime_arn,
+        runtimeSessionId=session_id,
+        qualifier=req.qualifier,
+        payload=payload,
+    )
+    latency_ms = int((time.perf_counter() - t0) * 1000)
+
+    body = resp.get("response")
+    if hasattr(body, "read"):
+        raw_bytes = body.read()
+    elif isinstance(body, (bytes, bytearray)):
+        raw_bytes = bytes(body)
+    else:
+        raw_bytes = json.dumps(body).encode("utf-8") if body is not None else b""
+
+    raw_str = raw_bytes.decode("utf-8", errors="replace")
+    text = raw_str
+    try:
+        parsed = json.loads(raw_str)
+        if isinstance(parsed, dict):
+            text = (
+                parsed.get("response")
+                or parsed.get("output")
+                or parsed.get("text")
+                or parsed.get("message")
+                or raw_str
+            )
+            if isinstance(text, dict):
+                text = json.dumps(text)
+        elif isinstance(parsed, str):
+            text = parsed
+    except (ValueError, TypeError):
+        pass
+
+    return InvokeAgentResult(
+        response_text=str(text),
+        latency_ms=latency_ms,
+        session_id=session_id,
+        raw={"content_type": resp.get("contentType", ""), "status_code": str(resp.get("statusCode", ""))},
+    )
+
+
+@app.post("/runtimes/invoke")
+def invoke_agent(req: InvokeAgentRequest) -> InvokeAgentResult:
+    """Invoke a deployed AgentCore Runtime synchronously."""
+    try:
+        return _invoke_agent(req)
     except (BotoCoreError, ClientError) as e:
         raise HTTPException(status_code=502, detail={"message": str(e)}) from e
 

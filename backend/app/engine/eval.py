@@ -25,6 +25,13 @@ class EvalRow(BaseModel):
 
 class EvalRequest(BaseModel):
     rows: list[EvalRow]
+    # Optional: when set, the engine invokes this AgentCore runtime per row
+    # and uses the agent response as the `answer` field for metrics.
+    agent_runtime_arn: str | None = None
+    aws_region: str = "us-east-1"
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+    aws_session_token: str | None = None
 
 
 class RowMetrics(BaseModel):
@@ -35,6 +42,8 @@ class RowMetrics(BaseModel):
     token_f1: float
     context_relevance: float
     answer_faithfulness: float
+    latency_ms: int | None = None
+    agent_response: str | None = None
 
 
 class EvalResult(BaseModel):
@@ -92,17 +101,45 @@ _METRIC_KEYS = ["exact_match", "token_f1", "context_relevance", "answer_faithful
 
 
 def run_eval(req: EvalRequest) -> EvalResult:
+    # Lazy import to avoid circular dep with main.py
+    invoke_agent_fn = None
+    invoke_request_cls = None
+    if req.agent_runtime_arn:
+        from .main import _invoke_agent, InvokeAgentRequest
+        invoke_agent_fn = _invoke_agent
+        invoke_request_cls = InvokeAgentRequest
+
     rows: list[RowMetrics] = []
     for row in req.rows:
-        em = 1.0 if row.answer.strip().lower() == row.ground_truth.strip().lower() else 0.0
+        latency_ms: int | None = None
+        agent_response: str | None = None
+        answer = row.answer
+
+        if req.agent_runtime_arn and invoke_agent_fn and invoke_request_cls:
+            invoke_req = invoke_request_cls(
+                agent_runtime_arn=req.agent_runtime_arn,
+                input_text=row.question,
+                aws_region=req.aws_region,
+                aws_access_key_id=req.aws_access_key_id,
+                aws_secret_access_key=req.aws_secret_access_key,
+                aws_session_token=req.aws_session_token,
+            )
+            result = invoke_agent_fn(invoke_req)
+            answer = result.response_text
+            latency_ms = result.latency_ms
+            agent_response = result.response_text
+
+        em = 1.0 if answer.strip().lower() == row.ground_truth.strip().lower() else 0.0
         rows.append(RowMetrics(
             question=row.question,
-            answer=row.answer,
+            answer=answer,
             ground_truth=row.ground_truth,
             exact_match=em,
-            token_f1=round(_token_f1(row.answer, row.ground_truth), 4),
+            token_f1=round(_token_f1(answer, row.ground_truth), 4),
             context_relevance=round(_context_relevance(row.question, row.contexts), 4),
-            answer_faithfulness=round(_faithfulness(row.answer, row.contexts), 4),
+            answer_faithfulness=round(_faithfulness(answer, row.contexts), 4),
+            latency_ms=latency_ms,
+            agent_response=agent_response,
         ))
     if not rows:
         agg: dict[str, float] = {k: 0.0 for k in _METRIC_KEYS}

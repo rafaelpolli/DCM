@@ -97,6 +97,95 @@ export async function previewNode(req: PreviewRequest, token: string): Promise<P
   return res.json() as Promise<PreviewResult>;
 }
 
+// ── Agent runtimes (catalog) ─────────────────────────────────────────────────
+
+export interface AwsCredsBody {
+  aws_region?: string;
+  aws_access_key_id?: string | null;
+  aws_secret_access_key?: string | null;
+  aws_session_token?: string | null;
+}
+
+export interface AgentRuntimeSummary {
+  agent_runtime_id: string;
+  agent_runtime_arn: string;
+  name: string;
+  status: string;
+  endpoint?: string | null;
+  created_at?: string | null;
+  last_updated_at?: string | null;
+}
+
+export interface ListAgentsResult {
+  agents: AgentRuntimeSummary[];
+  using_iam_role: boolean;
+}
+
+export interface AgentStatusResult {
+  agent_runtime_id: string;
+  status: string;
+  endpoint?: string | null;
+  created_at?: string | null;
+  last_updated_at?: string | null;
+  raw: Record<string, string>;
+}
+
+export interface InvokeAgentResult {
+  response_text: string;
+  latency_ms: number;
+  session_id: string;
+  raw: Record<string, string>;
+}
+
+function cleanCredsBody(creds: AwsCredsBody): Record<string, unknown> {
+  const out: Record<string, unknown> = { aws_region: creds.aws_region ?? 'us-east-1' };
+  if (creds.aws_access_key_id) {
+    out.aws_access_key_id = creds.aws_access_key_id;
+    out.aws_secret_access_key = creds.aws_secret_access_key;
+    if (creds.aws_session_token) out.aws_session_token = creds.aws_session_token;
+  }
+  return out;
+}
+
+async function postJson<T>(path: string, body: unknown, token: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    const msg = (detail as { detail?: { message?: string } | string }).detail;
+    const text = typeof msg === 'string' ? msg : msg?.message ?? `HTTP ${res.status}`;
+    throw new Error(text);
+  }
+  return res.json() as Promise<T>;
+}
+
+export function listAgentRuntimes(creds: AwsCredsBody, token: string): Promise<ListAgentsResult> {
+  return postJson<ListAgentsResult>('/agents/runtimes/list', cleanCredsBody(creds), token);
+}
+
+export function getAgentStatus(agent_runtime_id: string, creds: AwsCredsBody, token: string): Promise<AgentStatusResult> {
+  return postJson<AgentStatusResult>('/agents/runtimes/status', { ...cleanCredsBody(creds), agent_runtime_id }, token);
+}
+
+export function invokeAgentRuntime(
+  agent_runtime_arn: string,
+  input_text: string,
+  creds: AwsCredsBody,
+  token: string,
+  opts: { session_id?: string; qualifier?: string } = {},
+): Promise<InvokeAgentResult> {
+  return postJson<InvokeAgentResult>('/agents/runtimes/invoke', {
+    ...cleanCredsBody(creds),
+    agent_runtime_arn,
+    input_text,
+    session_id: opts.session_id,
+    qualifier: opts.qualifier ?? 'DEFAULT',
+  }, token);
+}
+
 // ── Test plan ────────────────────────────────────────────────────────────────
 
 export interface TestPlanResult {
@@ -121,9 +210,9 @@ export async function getTestPlan(project: Project, token: string): Promise<Test
 // ── Traces ───────────────────────────────────────────────────────────────────
 
 export interface TracesRequest {
-  aws_access_key_id: string;
-  aws_secret_access_key: string;
-  aws_session_token?: string;
+  aws_access_key_id?: string | null;
+  aws_secret_access_key?: string | null;
+  aws_session_token?: string | null;
   aws_region: string;
   agent_name: string;
   minutes: number;
@@ -156,35 +245,3 @@ export async function queryTraces(req: TracesRequest, token: string): Promise<Tr
   return res.json() as Promise<TracesResult>;
 }
 
-// ── Deployments ──────────────────────────────────────────────────────────────
-
-export interface DeploymentStatusRequest {
-  aws_access_key_id: string;
-  aws_secret_access_key: string;
-  aws_session_token?: string;
-  aws_region: string;
-  agent_runtime_id: string;
-}
-
-export interface DeploymentStatusResult {
-  agent_runtime_id: string;
-  status: string;
-  endpoint: string | null;
-  created_at: string | null;
-  last_updated_at: string | null;
-  raw: Record<string, string>;
-}
-
-export async function getDeploymentStatus(req: DeploymentStatusRequest, token: string): Promise<DeploymentStatusResult> {
-  const res = await fetch(`${API_BASE}/agents/deployments/status`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-    body: JSON.stringify(req),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const msg = (body as { detail?: { message?: string } }).detail?.message ?? `HTTP ${res.status}`;
-    throw new Error(msg);
-  }
-  return res.json() as Promise<DeploymentStatusResult>;
-}

@@ -16,10 +16,10 @@ export function Layout() {
     if (path === '/') return 'dashboard';
     if (path.startsWith('/contracts')) return 'contracts';
     if (path.startsWith('/requests')) return 'requests';
+    if (path.startsWith('/agents-catalog') || path.startsWith('/deployments')) return 'catalog';
     if (path.startsWith('/agents')) return 'agents';
     if (path.startsWith('/eval')) return 'eval';
     if (path.startsWith('/traces')) return 'traces';
-    if (path.startsWith('/deployments')) return 'deployments';
     return '';
   })();
 
@@ -100,9 +100,9 @@ export function Layout() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             )}
-            {navLink('/deployments', t.nav.deployments,
+            {navLink('/agents-catalog', t.nav.deployments,
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 12h14M12 5l7 7-7 7" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
               </svg>
             )}
           </nav>
