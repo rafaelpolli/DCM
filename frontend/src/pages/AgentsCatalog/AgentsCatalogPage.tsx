@@ -11,6 +11,7 @@ import {
 } from '../../api/engine';
 import { useAuthStore } from '../../store/authStore';
 import { useAwsCredsStore } from '../../store/awsCredentialsStore';
+import { useMockModeStore } from '../../store/mockModeStore';
 import { showToast } from '../../components/shared/Toast';
 
 const STATUS_STYLE: Record<string, { cls: string; dot: string }> = {
@@ -55,6 +56,7 @@ export function AgentsCatalogPage() {
   const { token } = useAuthStore();
   const navigate = useNavigate();
   const creds = useAwsCredsStore();
+  const { mockMode } = useMockModeStore();
 
   const [agents, setAgents] = useState<AgentRuntimeSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -149,7 +151,12 @@ export function AgentsCatalogPage() {
           <p className="text-sm text-gray-400 mt-1">Agentes implantados em AgentCore Runtime na conta AWS</p>
         </div>
         <div className="flex items-center gap-2">
-          {creds.usingIamRole ? (
+          {mockMode ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              Modo demo (mock)
+            </span>
+          ) : creds.usingIamRole ? (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-green-700 bg-green-50 border border-green-200">
               <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
               Usando IAM role
@@ -160,12 +167,14 @@ export function AgentsCatalogPage() {
               Credenciais manuais
             </span>
           ) : null}
-          <button
-            onClick={() => setShowCredsForm(v => !v)}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 transition-colors"
-          >
-            {showCredsForm ? 'Fechar' : 'Configurar AWS'}
-          </button>
+          {!mockMode && (
+            <button
+              onClick={() => setShowCredsForm(v => !v)}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 transition-colors"
+            >
+              {showCredsForm ? 'Fechar' : 'Configurar AWS'}
+            </button>
+          )}
           <button
             onClick={fetchAgents}
             disabled={loading}
@@ -176,7 +185,7 @@ export function AgentsCatalogPage() {
         </div>
       </div>
 
-      {showCredsForm && (
+      {showCredsForm && !mockMode && (
         <div className="card p-5 mb-5">
           <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Credenciais AWS</h2>
           <p className="text-xs text-gray-400 mb-4">

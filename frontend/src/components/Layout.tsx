@@ -1,8 +1,11 @@
+import { useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { Toast } from './shared/Toast';
 import { useT } from '../hooks/useT';
 import { useLangStore } from '../store/langStore';
+import { useMockModeStore } from '../store/mockModeStore';
+import { checkEngineHealth } from '../api/engine';
 
 export function Layout() {
   const { user, logout } = useAuthStore();
@@ -10,6 +13,16 @@ export function Layout() {
   const navigate = useNavigate();
   const t = useT();
   const { lang, setLang } = useLangStore();
+  const { mockMode, setMockMode } = useMockModeStore();
+
+  useEffect(() => {
+    let stopped = false;
+    const ctl = new AbortController();
+    checkEngineHealth(ctl.signal).then(r => {
+      if (!stopped && r.mockMode !== undefined) setMockMode(Boolean(r.mockMode));
+    });
+    return () => { stopped = true; ctl.abort(); };
+  }, [setMockMode]);
 
   const currentPage = (() => {
     const path = location.pathname;
@@ -158,6 +171,17 @@ export function Layout() {
           )}
         </div>
       </header>
+
+      {mockMode && (
+        <div
+          className="flex items-center justify-center gap-2 px-4 py-1.5 text-xs font-semibold text-amber-900 border-b border-amber-300"
+          style={{ background: 'linear-gradient(90deg,#fde68a,#fbbf24)' }}
+          title="Engine is running with MOCK_MODE=true. AWS endpoints return fixtures, not real data."
+        >
+          <span>⚠</span>
+          <span>MODO DEMO — dados simulados, nenhuma chamada AWS real é feita</span>
+        </div>
+      )}
 
       {/* Page content */}
       {(currentPage === 'agents') ? (

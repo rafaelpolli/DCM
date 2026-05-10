@@ -14,14 +14,15 @@ export interface HealthResult {
   ok: boolean;
   timestamp?: string;
   error?: string;
+  mockMode?: boolean;
 }
 
 export async function checkEngineHealth(signal?: AbortSignal): Promise<HealthResult> {
   try {
     const res = await fetch(`${API_BASE}/health`, { signal });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
-    const body = (await res.json()) as { status?: string; timestamp?: string };
-    return { ok: body.status === 'ok', timestamp: body.timestamp };
+    const body = (await res.json()) as { status?: string; timestamp?: string; mock_mode?: boolean };
+    return { ok: body.status === 'ok', timestamp: body.timestamp, mockMode: body.mock_mode === true };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

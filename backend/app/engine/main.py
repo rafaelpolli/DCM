@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from . import mocks
 from .eval import EvalRequest, EvalResult, run_eval
 from .integrations.git import GitHubClient, GitLabClient, GitProviderError
 from .models.graph import Project
@@ -64,7 +65,11 @@ def _boto_client(service: str, req: BaseModel):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "mock_mode": mocks.is_mock_mode(),
+    }
 
 
 @app.post("/validate")
@@ -153,6 +158,8 @@ def preview_node(req: PreviewRequest) -> PreviewResult:
     Used by the Studio prompt-tester panel. Requires the engine to have
     AWS credentials with bedrock:InvokeModel permission.
     """
+    if mocks.is_mock_mode():
+        return PreviewResult(**mocks.preview_node(req.model_id, req.input_text))
     try:
         client = boto3.client("bedrock-runtime", region_name=req.aws_region)
         body = {
@@ -248,6 +255,8 @@ class TracesResult(BaseModel):
 @app.post("/traces/query")
 def query_traces(req: TracesRequest) -> TracesResult:
     """Query CloudWatch Logs Insights for AgentCore genai observability spans."""
+    if mocks.is_mock_mode():
+        return TracesResult(**mocks.query_traces(req.agent_name, req.minutes))
     log_group = f"/aws/bedrock/agentcore/{req.agent_name}"
     try:
         logs = _boto_client("logs", req)
@@ -327,6 +336,11 @@ class ListAgentsResult(BaseModel):
 @app.post("/runtimes/list")
 def list_agents(req: ListAgentsRequest) -> ListAgentsResult:
     """List AgentCore Runtimes deployed in the AWS account."""
+    if mocks.is_mock_mode():
+        return ListAgentsResult(
+            agents=[AgentRuntimeSummary(**a) for a in mocks.list_agents()],
+            using_iam_role=True,
+        )
     try:
         agentcore = _boto_client("bedrock-agentcore-control", req)
         resp = agentcore.list_agent_runtimes()
@@ -365,6 +379,11 @@ class AgentStatusResult(BaseModel):
 @app.post("/runtimes/status")
 def agent_status(req: AgentStatusRequest) -> AgentStatusResult:
     """Get AgentCore Runtime status for a specific deployed agent."""
+    if mocks.is_mock_mode():
+        data = mocks.get_agent_status(req.agent_runtime_id)
+        if not data:
+            raise HTTPException(status_code=404, detail={"message": "Mock agent not found"})
+        return AgentStatusResult(**data)
     try:
         agentcore = _boto_client("bedrock-agentcore-control", req)
         resp = agentcore.get_agent_runtime(agentRuntimeId=req.agent_runtime_id)
@@ -398,6 +417,8 @@ def _invoke_agent(req: InvokeAgentRequest) -> InvokeAgentResult:
     """Internal helper — invoke an AgentCore runtime, return response text + latency."""
     import uuid
     session_id = req.session_id or str(uuid.uuid4())
+    if mocks.is_mock_mode():
+        return InvokeAgentResult(**mocks.invoke_agent(req.agent_runtime_arn, req.input_text, session_id))
     runtime = _boto_client("bedrock-agentcore", req)
     payload = json.dumps({"prompt": req.input_text, "input": req.input_text}).encode("utf-8")
     t0 = time.perf_counter()

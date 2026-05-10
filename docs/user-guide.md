@@ -152,6 +152,7 @@ Set on HF Space at **Settings → Variables and secrets**:
 | `CORS_ORIGINS` | Yes | `http://localhost:5173,http://localhost:4173` | Comma-separated frontend origins |
 | `JWT_SECRET` | Yes | `dev-secret` | Secret key for JWT signing |
 | `DCM_DATABASE_PATH` | No | `data/dcm.sqlite3` | SQLite database path |
+| `MOCK_MODE` | No | unset | Set to `true`/`1` to short-circuit AWS endpoints (Bedrock, AgentCore, CloudWatch) and return demo fixtures. Lets the platform run as self-contained demo with no AWS account or boto3 calls. Frontend shows a yellow "MODO DEMO" banner. Hides the AWS credentials form in the catalog. |
 
 ### Caveats
 
