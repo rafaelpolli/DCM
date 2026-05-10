@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { runEval, type EvalRow, type EvalResult } from '../../api/eval';
 import { useAuthStore } from '../../store/authStore';
 
@@ -18,6 +18,54 @@ const METRIC_COLORS: Record<string, string> = {
 
 const EMPTY_ROW = (): EvalRow => ({ question: '', contexts: [''], answer: '', ground_truth: '' });
 
+const CSV_HEADER = 'question,answer,ground_truth,contexts';
+const CSV_TEMPLATE = `${CSV_HEADER}\n"What is the capital of France?","The capital of France is Paris.","Paris","Paris is the capital and most populous city of France|France is a country in Western Europe"\n"Who wrote Hamlet?","William Shakespeare wrote Hamlet.","William Shakespeare",""`;
+
+function parseCSVLine(line: string): string[] {
+  const fields: string[] = [];
+  let cur = '';
+  let inQuote = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
+      else { inQuote = !inQuote; }
+    } else if (ch === ',' && !inQuote) {
+      fields.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  fields.push(cur);
+  return fields;
+}
+
+function parseCSV(text: string): EvalRow[] | string {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return 'CSV must have a header row and at least one data row.';
+  const header = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+  const qi = header.indexOf('question');
+  const ai = header.indexOf('answer');
+  const gi = header.indexOf('ground_truth');
+  const ci = header.indexOf('contexts');
+  if (qi === -1 || ai === -1 || gi === -1) return 'CSV must have columns: question, answer, ground_truth (and optionally contexts).';
+  const rows: EvalRow[] = [];
+  for (let r = 1; r < lines.length; r++) {
+    if (!lines[r].trim()) continue;
+    const cols = parseCSVLine(lines[r]);
+    const contexts = ci !== -1 && cols[ci]?.trim()
+      ? cols[ci].split('|').map(s => s.trim()).filter(Boolean)
+      : [''];
+    rows.push({
+      question: cols[qi]?.trim() ?? '',
+      answer: cols[ai]?.trim() ?? '',
+      ground_truth: cols[gi]?.trim() ?? '',
+      contexts,
+    });
+  }
+  return rows.length ? rows : 'No valid rows found in CSV.';
+}
+
 function ScoreBar({ value, color }: { value: number; color: string }) {
   return (
     <div className="flex items-center gap-2">
@@ -35,6 +83,29 @@ export function EvalPage() {
   const [result, setResult] = useState<EvalResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleCSVLoad = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const text = ev.target?.result as string;
+      const parsed = parseCSV(text);
+      if (typeof parsed === 'string') { setError(parsed); }
+      else { setRows(parsed); setResult(null); setError(''); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
+  const downloadTemplate = () => {
+    const blob = new Blob([CSV_TEMPLATE], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'eval_template.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const updateRow = (i: number, field: keyof EvalRow, value: string | string[]) => {
     setRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r));
@@ -68,13 +139,35 @@ export function EvalPage() {
           <h1 className="text-2xl font-extrabold text-gray-900">Agent Evaluation</h1>
           <p className="text-sm text-gray-400 mt-1">Measure answer quality against ground truth</p>
         </div>
-        <button
-          onClick={handleSubmit}
-          disabled={loading}
-          className="btn-primary"
-        >
-          {loading ? 'Running...' : '▶ Run Evaluation'}
-        </button>
+        <div className="flex items-center gap-2">
+          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleCSVLoad} />
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            Carregar CSV
+          </button>
+          <button
+            onClick={downloadTemplate}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold text-gray-400 hover:text-gray-600 transition-colors"
+            title="Download CSV template"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Template
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="btn-primary"
+          >
+            {loading ? 'Running...' : '▶ Run Evaluation'}
+          </button>
+        </div>
       </div>
 
       {error && (
