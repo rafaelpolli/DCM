@@ -43,7 +43,7 @@ export async function fetchContracts(
   return res.json();
 }
 
-export async function fetchContract(token: string, cid: string): Promise<{ contract: Contract; related_requests: ChangeRequest[] }> {
+export async function fetchContract(token: string, cid: string): Promise<{ contract: Contract; related_requests: ChangeRequest[]; paired_contract?: Contract }> {
   const res = await fetch(`${API_BASE}/dcm/contracts/${cid}`, { headers: headers(token) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();

@@ -47,6 +47,19 @@ export interface HistoryEntry {
   note: string;
 }
 
+export interface DQRule {
+  category: string;
+  check: string;
+  column: string;
+  params: Record<string, string>;
+  severity: 'CRITICAL' | 'ALERT';
+}
+
+export interface BusinessLogic {
+  sql?: string;
+  dependencies?: { table: string; contract_id?: string }[];
+}
+
 export interface Contract {
   id: string;
   name: string;
@@ -67,6 +80,9 @@ export interface Contract {
   partitioning: Partitioning;
   fields: FieldSchema[];
   history: HistoryEntry[];
+  data_quality?: DQRule[];
+  business_logic?: BusinessLogic;
+  paired_contract_id?: string;
 }
 
 export interface DiffChange {
