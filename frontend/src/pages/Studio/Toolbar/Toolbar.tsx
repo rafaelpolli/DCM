@@ -2,11 +2,12 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGraphStore } from '../../../store/graphStore';
 import { useAuthStore } from '../../../store/authStore';
-import { validateGraph, generateZip, checkEngineHealth } from '../../../api/engine';
+import { validateGraph, generateZip, checkEngineHealth, getTestPlan, type TestPlanResult } from '../../../api/engine';
 import { importAgentZip, ImportError } from '../../../api/import';
 import { HelpPanel } from '../Help/HelpPanel';
 import { GitPanel } from '../GitPanel/GitPanel';
 import { CostEstimatorPanel } from '../CostEstimator/CostEstimatorPanel';
+import { TestPlanModal } from '../TestPlan/TestPlanModal';
 
 type EngineHealth = 'unknown' | 'ok' | 'down';
 
@@ -57,6 +58,7 @@ export function Toolbar() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [gitOpen, setGitOpen] = useState(false);
   const [costOpen, setCostOpen] = useState(false);
+  const [testPlan, setTestPlan] = useState<TestPlanResult | null>(null);
   const navigate = useNavigate();
   const [engineHealth, setEngineHealth] = useState<EngineHealth>('unknown');
   const [healthError, setHealthError] = useState('');
@@ -133,6 +135,20 @@ export function Toolbar() {
     },
     [loadProject],
   );
+
+  const onTestPlan = useCallback(async () => {
+    setStatus('validating');
+    setErrorMsg('');
+    try {
+      const result = await getTestPlan(getProject(), token!);
+      setTestPlan(result);
+      setStatus('valid');
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setStatus('error');
+      setErrorMsg(msg);
+    }
+  }, [getProject, token]);
 
   const onGenerate = useCallback(async () => {
     setStatus('validating');
@@ -213,6 +229,12 @@ export function Toolbar() {
         <span>📊</span> Eval
       </button>
 
+      <button onClick={onTestPlan} disabled={status === 'validating' || status === 'generating' || engineHealth === 'down'}
+        title={engineHealth === 'down' ? 'Engine offline' : 'Generate pytest files for tools (preview)'}
+        className={btnCls}>
+        <span>🧪</span> Test Plan
+      </button>
+
       <button onClick={() => setCostOpen(true)} title="Estimate monthly AWS cost for this graph"
         className={btnCls}>
         <span>💰</span> Cost
@@ -243,6 +265,7 @@ export function Toolbar() {
       {helpOpen && <HelpPanel onClose={() => setHelpOpen(false)} />}
       {gitOpen && <GitPanel onClose={() => setGitOpen(false)} />}
       {costOpen && <CostEstimatorPanel onClose={() => setCostOpen(false)} />}
+      {testPlan && <TestPlanModal result={testPlan} onClose={() => setTestPlan(null)} />}
     </header>
   );
 }

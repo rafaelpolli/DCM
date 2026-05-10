@@ -179,8 +179,8 @@ class TestPlanResult(BaseModel):
     tool_count: int
 
 
-@app.post("/run-tests")
-def run_tests(project: Project) -> TestPlanResult:
+@app.post("/test-plan")
+def test_plan(project: Project) -> TestPlanResult:
     """Generate and return the pytest files for the project without executing them.
 
     The Studio shows these as a "test plan" preview. Actual execution:
