@@ -207,7 +207,7 @@ export interface TestPlanResult {
 }
 
 export async function getTestPlan(project: Project, token: string): Promise<TestPlanResult> {
-  const res = await fetch(`${API_BASE}/test-plan`, {
+  const res = await fetch(`${API_BASE}/agents/test-plan`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
     body: JSON.stringify(project),
