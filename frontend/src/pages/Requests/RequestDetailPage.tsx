@@ -214,48 +214,90 @@ export function RequestDetailPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 divide-x divide-gray-100 text-xs font-mono">
-            <div className="px-5 py-2.5 bg-gray-50 text-gray-500 font-semibold">
-              {t.requestDetail.current_version}{req.diff?.version_from ? ` (${req.diff.version_from})` : ''}
-            </div>
-            <div className="px-5 py-2.5 bg-gray-50 text-gray-500 font-semibold">
-              {t.requestDetail.proposed_version} ({req.diff?.version_to})
-            </div>
+          {(() => {
+            type Side = { num: number | null; marker: '-' | '+' | ' '; content: string; bg: 'red' | 'green' | 'empty' };
+            const rows: { left: Side; right: Side }[] = [];
+            let lineL = 0;
+            let lineR = 0;
+            const fmt = (v: unknown) => v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v);
 
-            {changes.map((c, i) => {
+            for (const c of changes) {
               const op = diffOp(c);
-              if (op === 'remove') return (
-                <Fragment key={i}>
-                  <div className="px-5 py-2.5 bg-red-50 text-red-700 flex items-center gap-2 border-t border-red-100">
-                    <span className="text-red-500 font-bold text-sm">−</span>
-                    <span>{c.field} {String(c.from)}</span>
+              if (op === 'remove') {
+                lineL += 1;
+                rows.push({
+                  left: { num: lineL, marker: '-', content: `${c.field}: ${fmt(c.from)}`, bg: 'red' },
+                  right: { num: null, marker: ' ', content: '', bg: 'empty' },
+                });
+              } else if (op === 'add') {
+                lineR += 1;
+                rows.push({
+                  left: { num: null, marker: ' ', content: '', bg: 'empty' },
+                  right: { num: lineR, marker: '+', content: `${c.field}: ${fmt(c.to)}`, bg: 'green' },
+                });
+              } else {
+                lineL += 1;
+                lineR += 1;
+                rows.push({
+                  left: { num: lineL, marker: '-', content: `${c.field}: ${fmt(c.from)}`, bg: 'red' },
+                  right: { num: lineR, marker: '+', content: `${c.field}: ${fmt(c.to)}`, bg: 'green' },
+                });
+              }
+            }
+
+            const bgCls: Record<Side['bg'], string> = {
+              red: 'bg-red-50',
+              green: 'bg-green-50',
+              empty: 'bg-gray-50/40',
+            };
+            const textCls: Record<Side['bg'], string> = {
+              red: 'text-red-800',
+              green: 'text-green-800',
+              empty: 'text-gray-300',
+            };
+            const numCls: Record<Side['bg'], string> = {
+              red: 'bg-red-100 text-red-500',
+              green: 'bg-green-100 text-green-600',
+              empty: 'bg-gray-100 text-gray-300',
+            };
+
+            const renderSide = (s: Side) => (
+              <div className={`flex items-stretch ${bgCls[s.bg]}`}>
+                <div className={`px-2 py-1 font-mono text-[10px] text-right select-none w-10 shrink-0 ${numCls[s.bg]} border-r border-gray-100`}>
+                  {s.num ?? ''}
+                </div>
+                <div className={`px-1 py-1 text-center font-bold w-5 shrink-0 ${textCls[s.bg]}`}>
+                  {s.marker !== ' ' ? s.marker : ''}
+                </div>
+                <div className={`px-2 py-1 font-mono text-xs whitespace-pre-wrap break-all flex-1 ${textCls[s.bg]}`}>
+                  {s.content}
+                </div>
+              </div>
+            );
+
+            return (
+              <div>
+                <div className="grid grid-cols-2 divide-x divide-gray-200 text-xs font-mono border-b border-gray-100">
+                  <div className="px-3 py-2 bg-gray-100 text-gray-600 font-semibold flex items-center gap-2">
+                    <span className="text-red-500">−</span>
+                    {t.requestDetail.current_version}{req.diff?.version_from ? ` (v${req.diff.version_from})` : ''}
                   </div>
-                  <div className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">{t.requestDetail.field_removed}</div>
-                </Fragment>
-              );
-              if (op === 'add') return (
-                <Fragment key={i}>
-                  <div className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">{t.requestDetail.field_added}</div>
-                  <div className="px-5 py-2.5 bg-green-50 text-green-700 flex items-center gap-2 border-t border-green-100">
-                    <span className="text-green-500 font-bold text-sm">+</span>
-                    <span>{c.field} {String(c.to)}</span>
+                  <div className="px-3 py-2 bg-gray-100 text-gray-600 font-semibold flex items-center gap-2">
+                    <span className="text-green-600">+</span>
+                    {t.requestDetail.proposed_version} (v{req.diff?.version_to})
                   </div>
-                </Fragment>
-              );
-              return (
-                <Fragment key={i}>
-                  <div className="px-5 py-2.5 bg-amber-50 text-amber-700 flex items-center gap-2 border-t border-amber-100">
-                    <span className="text-amber-500 font-bold text-sm">~</span>
-                    <span>{c.field} = {String(c.from)}</span>
-                  </div>
-                  <div className="px-5 py-2.5 bg-amber-50 text-amber-800 flex items-center gap-2 border-t border-amber-100">
-                    <span className="text-amber-500 font-bold text-sm">~</span>
-                    <span>{c.field} = {String(c.to)}</span>
-                  </div>
-                </Fragment>
-              );
-            })}
-          </div>
+                </div>
+                <div className="grid grid-cols-2 divide-x divide-gray-200">
+                  {rows.map((r, i) => (
+                    <Fragment key={i}>
+                      {renderSide(r.left)}
+                      {renderSide(r.right)}
+                    </Fragment>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50">
             <p className="text-xs text-gray-400">
