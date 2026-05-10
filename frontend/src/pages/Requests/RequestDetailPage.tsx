@@ -31,17 +31,6 @@ function diffOp(c: DiffChange): 'add' | 'remove' | 'modify' {
   return 'modify';
 }
 
-function formatVal(val: unknown, field: string): string {
-  if (val == null) return '';
-  if (typeof val === 'object' && val !== null) {
-    const f = val as Record<string, unknown>;
-    const nullable = f.nullable === true ? 'NULL' : 'NOT NULL';
-    const pii = typeof f.pii === 'string' ? `PII:${f.pii}` : '';
-    return [f.name ?? field, f.type ?? '', nullable, pii].filter(Boolean).join(' ');
-  }
-  return String(val);
-}
-
 export function RequestDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { token, user } = useAuthStore();
@@ -215,82 +204,59 @@ export function RequestDetailPage() {
       {/* Diff visual */}
       {changes.length > 0 && (
         <div className="card overflow-hidden">
-          {/* Header */}
-          <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between bg-gray-50/60">
+          <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
             <h2 className="text-sm font-bold text-gray-800">{t.requestDetail.diff_title}</h2>
-            {req.diff?.version_from && (
-              <div className="flex items-center gap-1.5 text-xs font-mono text-gray-400">
-                <span className="px-1.5 py-0.5 bg-red-50 text-red-600 rounded border border-red-100">v{req.diff.version_from}</span>
-                <span>→</span>
-                <span className="px-1.5 py-0.5 bg-green-50 text-green-700 rounded border border-green-100">v{req.diff.version_to}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-2 text-xs text-gray-400 font-mono">
+              {req.diff?.version_from && (
+                <><span>v{req.diff.version_from}</span><span>→</span></>
+              )}
+              <span>v{req.diff?.version_to}</span>
+            </div>
           </div>
 
-          {/* Unified diff */}
-          <div className="font-mono text-xs bg-white">
-            {/* Column headers */}
-            <div className="flex border-b border-gray-100 bg-gray-50/80 text-[11px] text-gray-400 font-semibold">
-              <div className="w-8 shrink-0 border-r border-gray-100" />
-              <div className="flex-1 px-4 py-2">
-                {t.requestDetail.current_version}{req.diff?.version_from ? ` (${req.diff.version_from})` : ''}
-                {req.diff?.version_from && (
-                  <span className="mx-3 text-gray-300">→</span>
-                )}
-                {req.diff?.version_from && t.requestDetail.proposed_version + ` (${req.diff.version_to})`}
-              </div>
+          <div className="grid grid-cols-2 divide-x divide-gray-100 text-xs font-mono">
+            <div className="px-5 py-2.5 bg-gray-50 text-gray-500 font-semibold">
+              {t.requestDetail.current_version}{req.diff?.version_from ? ` (${req.diff.version_from})` : ''}
+            </div>
+            <div className="px-5 py-2.5 bg-gray-50 text-gray-500 font-semibold">
+              {t.requestDetail.proposed_version} ({req.diff?.version_to})
             </div>
 
             {changes.map((c, i) => {
               const op = diffOp(c);
               if (op === 'remove') return (
-                <div key={i} className="flex border-t border-red-100 bg-[#fff5f5] hover:bg-red-50 transition-colors">
-                  <div className="w-8 shrink-0 flex items-center justify-center text-red-400 font-bold border-r border-red-100 bg-red-50/60 select-none">
-                    −
+                <Fragment key={i}>
+                  <div className="px-5 py-2.5 bg-red-50 text-red-700 flex items-center gap-2 border-t border-red-100">
+                    <span className="text-red-500 font-bold text-sm">−</span>
+                    <span>{c.field} {String(c.from)}</span>
                   </div>
-                  <div className="flex-1 px-4 py-2.5 text-red-700">
-                    <span className="text-red-400 mr-2">−</span>
-                    {formatVal(c.from, c.field)}
-                  </div>
-                </div>
+                  <div className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">{t.requestDetail.field_removed}</div>
+                </Fragment>
               );
               if (op === 'add') return (
-                <div key={i} className="flex border-t border-green-100 bg-[#f5fff7] hover:bg-green-50 transition-colors">
-                  <div className="w-8 shrink-0 flex items-center justify-center text-green-500 font-bold border-r border-green-100 bg-green-50/60 select-none">
-                    +
+                <Fragment key={i}>
+                  <div className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">{t.requestDetail.field_added}</div>
+                  <div className="px-5 py-2.5 bg-green-50 text-green-700 flex items-center gap-2 border-t border-green-100">
+                    <span className="text-green-500 font-bold text-sm">+</span>
+                    <span>{c.field} {String(c.to)}</span>
                   </div>
-                  <div className="flex-1 px-4 py-2.5 text-green-800">
-                    <span className="text-green-500 mr-2">+</span>
-                    {formatVal(c.to, c.field)}
-                  </div>
-                </div>
+                </Fragment>
               );
               return (
                 <Fragment key={i}>
-                  <div className="flex border-t border-red-100 bg-[#fff5f5] hover:bg-red-50 transition-colors">
-                    <div className="w-8 shrink-0 flex items-center justify-center text-red-400 font-bold border-r border-red-100 bg-red-50/60 select-none">
-                      −
-                    </div>
-                    <div className="flex-1 px-4 py-2.5 text-red-700">
-                      <span className="text-red-400 mr-2">−</span>
-                      {c.field} = {formatVal(c.from, c.field)}
-                    </div>
+                  <div className="px-5 py-2.5 bg-amber-50 text-amber-700 flex items-center gap-2 border-t border-amber-100">
+                    <span className="text-amber-500 font-bold text-sm">~</span>
+                    <span>{c.field} = {String(c.from)}</span>
                   </div>
-                  <div className="flex border-t border-green-100 bg-[#f5fff7] hover:bg-green-50 transition-colors">
-                    <div className="w-8 shrink-0 flex items-center justify-center text-green-500 font-bold border-r border-green-100 bg-green-50/60 select-none">
-                      +
-                    </div>
-                    <div className="flex-1 px-4 py-2.5 text-green-800">
-                      <span className="text-green-500 mr-2">+</span>
-                      {c.field} = {formatVal(c.to, c.field)}
-                    </div>
+                  <div className="px-5 py-2.5 bg-amber-50 text-amber-800 flex items-center gap-2 border-t border-amber-100">
+                    <span className="text-amber-500 font-bold text-sm">~</span>
+                    <span>{c.field} = {String(c.to)}</span>
                   </div>
                 </Fragment>
               );
             })}
           </div>
 
-          {/* Footer counts */}
           <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50">
             <p className="text-xs text-gray-400">
               {removes.length > 0 && <span className="text-red-500 font-semibold">{removes.length} {t.requestDetail.removed_count}</span>}
