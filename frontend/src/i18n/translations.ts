@@ -10,7 +10,7 @@ export const translations = {
     },
     nav: {
       dashboard: 'Dashboard',
-      catalog: 'Catálogo',
+      catalog: 'Contratos',
       requests: 'Solicitações',
       agents: 'Agentes',
       eval: 'Avaliação',
@@ -69,7 +69,7 @@ export const translations = {
       col_date: 'Data',
     },
     catalog: {
-      title: 'Catálogo',
+      title: 'Contratos',
       subtitle: 'Contratos de dados registrados',
       new_contract: 'Novo Contrato',
       search_placeholder: 'Buscar contrato...',
@@ -100,7 +100,7 @@ export const translations = {
     contractDetail: {
       loading: 'Carregando contrato...',
       error: 'Erro ao carregar contrato',
-      back_catalog: 'Catálogo',
+      back_catalog: 'Contratos',
       request_change: 'Solicitar Alteração',
       export: 'Exportar',
       generate_agent: '🤖 Gerar Agente',
@@ -165,7 +165,7 @@ export const translations = {
     },
     nav: {
       dashboard: 'Panel',
-      catalog: 'Catálogo',
+      catalog: 'Contratos',
       requests: 'Solicitudes',
       agents: 'Agentes',
       eval: 'Evaluación',
@@ -224,7 +224,7 @@ export const translations = {
       col_date: 'Fecha',
     },
     catalog: {
-      title: 'Catálogo',
+      title: 'Contratos',
       subtitle: 'Contratos de datos registrados',
       new_contract: 'Nuevo Contrato',
       search_placeholder: 'Buscar contrato...',
@@ -255,7 +255,7 @@ export const translations = {
     contractDetail: {
       loading: 'Cargando contrato...',
       error: 'Error al cargar contrato',
-      back_catalog: 'Catálogo',
+      back_catalog: 'Contratos',
       request_change: 'Solicitar Cambio',
       export: 'Exportar',
       generate_agent: '🤖 Generar Agente',

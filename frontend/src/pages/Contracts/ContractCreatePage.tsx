@@ -338,7 +338,7 @@ export function ContractCreatePage() {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="flex items-center gap-2 text-sm text-gray-400 mb-4">
-        <Link to="/contracts" className="text-gray-500 hover:text-gray-900">Catálogo</Link>
+        <Link to="/contracts" className="text-gray-500 hover:text-gray-900">Contratos</Link>
         <span className="text-gray-400"> / </span>
         <span className="text-gray-700">Novo Contrato</span>
       </div>
