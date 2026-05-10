@@ -172,6 +172,15 @@ class CommentCreate(BaseModel):
     text: str
 
 
+class ChangeRequestCreate(BaseModel):
+    contract_id: str
+    type: str = "AMEND"
+    title: str
+    description: str = ""
+    target_version: str = ""
+    changes: list[DiffChange] = Field(default_factory=list)
+
+
 class ApprovalResponse(BaseModel):
     ok: bool
     message: str = ""

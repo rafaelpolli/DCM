@@ -4,6 +4,7 @@ import { fetchContract } from '../../api/dcm';
 import { useAuthStore } from '../../store/authStore';
 import type { Contract, ChangeRequest, DQRule } from '../../types/dcm';
 import { ExportModal } from './ExportModal';
+import { RequestChangeModal } from './RequestChangeModal';
 import { useGraphStore } from '../../store/graphStore';
 import type { AgentNode, AgentEdge } from '../../types/graph';
 import { useT } from '../../hooks/useT';
@@ -51,6 +52,7 @@ export function ContractDetailPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [showExport, setShowExport] = useState(false);
   const [exportDropOpen, setExportDropOpen] = useState(false);
+  const [showRequest, setShowRequest] = useState(false);
 
   const loadProject = useGraphStore(s => s.loadProject);
   const setProjectName = useGraphStore(s => s.setProjectName);
@@ -192,10 +194,10 @@ export function ContractDetailPage() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {(user?.role === 'creator' || user?.role === 'admin') && (
-              <Link to="/requests"
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 transition-colors no-underline">
+              <button onClick={() => setShowRequest(true)}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 transition-colors">
                 {t.contractDetail.request_change}
-              </Link>
+              </button>
             )}
             {/* Export dropdown */}
             <div className="relative">
@@ -669,6 +671,10 @@ export function ContractDetailPage() {
 
       {showExport && (
         <ExportModal contract={contract} token={token!} onClose={() => setShowExport(false)} />
+      )}
+
+      {showRequest && (
+        <RequestChangeModal contract={contract} onClose={() => setShowRequest(false)} />
       )}
     </div>
   );

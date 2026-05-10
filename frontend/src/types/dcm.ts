@@ -1,6 +1,6 @@
 export type ContractStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
 export type RequestStatus = 'OPEN' | 'APPROVED' | 'REJECTED';
-export type RequestType = 'CREATE' | 'UPDATE' | 'DELETE';
+export type RequestType = 'CREATE' | 'UPDATE' | 'DELETE' | 'AMEND' | 'SCHEMA_CHANGE' | 'SLA_CHANGE' | 'DEPRECATE';
 export type DataLayer = 'RAW' | 'BRONZE' | 'SILVER' | 'GOLD';
 export type DataFormat = 'PARQUET' | 'AVRO' | 'ORC' | 'JSON' | 'CSV' | 'DELTA';
 export type CompressionType = 'NONE' | 'SNAPPY' | 'ZSTD' | 'GZIP';
@@ -151,6 +151,15 @@ export interface ExportResponse {
 }
 
 // ── Create/Update bodies ──
+
+export interface ChangeRequestCreateBody {
+  contract_id: string;
+  type: RequestType;
+  title: string;
+  description: string;
+  target_version: string;
+  changes: { op: string; field: string; old: unknown; new: unknown }[];
+}
 
 export interface ContractCreateBody {
   name: string;

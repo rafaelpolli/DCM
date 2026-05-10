@@ -2,6 +2,7 @@ import type {
   Contract,
   ChangeRequest,
   ContractCreateBody,
+  ChangeRequestCreateBody,
   ContractListResponse,
   RequestListResponse,
   DashboardData,
@@ -75,6 +76,19 @@ export async function exportContract(
 }
 
 // ── Change Requests ─────────────────────────────────────────────
+
+export async function createRequest(token: string, body: ChangeRequestCreateBody): Promise<{ ok: boolean; id: string }> {
+  const res = await fetch(`${API_BASE}/dcm/requests`, {
+    method: 'POST',
+    headers: headers(token),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
 
 export async function fetchRequests(
   token: string,

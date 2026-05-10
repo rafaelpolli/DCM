@@ -20,6 +20,7 @@ from app.dcm.mock_data import (
 )
 from app.dcm.models import (
     ApprovalResponse,
+    ChangeRequestCreate,
     ChangeRequestListResponse,
     CommentCreate,
     ContractCreate,
@@ -210,6 +211,65 @@ def contract_export(cid: str, format: str = "json") -> dict:
 
 
 # ── Change Requests ──────────────────────────────────────────────────────────
+
+@router.post("/requests")
+def request_create(
+    body: ChangeRequestCreate,
+    user: Annotated[dict, Depends(get_current_user)],
+) -> dict:
+    role = user.get("role", "viewer")
+    if role not in ("creator", "admin"):
+        raise HTTPException(status_code=403, detail="Creator or admin role required")
+
+    contract = _contracts.get(body.contract_id)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    if not body.title.strip():
+        raise HTTPException(status_code=400, detail="Title required")
+
+    valid_types = {"AMEND", "SCHEMA_CHANGE", "SLA_CHANGE", "UPDATE", "DEPRECATE", "DELETE"}
+    if body.type not in valid_types:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of {sorted(valid_types)}")
+
+    today = str(date.today())
+    rid = next_request_id()
+    version_from = contract.get("version", "")
+
+    changes = []
+    for c in body.changes:
+        changes.append({
+            "op": c.op,
+            "field": c.field,
+            "from": c.old,
+            "to": c.new,
+        })
+
+    _requests[rid] = {
+        "id": rid,
+        "title": body.title.strip(),
+        "type": body.type,
+        "contract_id": body.contract_id,
+        "contract_name": contract.get("name", ""),
+        "requester": user.get("email", ""),
+        "requester_name": user.get("name", ""),
+        "status": "OPEN",
+        "created_at": today,
+        "updated_at": today,
+        "description": body.description.strip(),
+        "diff": {
+            "version_from": version_from or None,
+            "version_to": body.target_version.strip(),
+            "changes": changes,
+        },
+        "comments": [],
+    }
+
+    from app.dcm.storage import save_change_request
+    save_change_request(_requests[rid])
+
+    return {"ok": True, "id": rid}
+
 
 @router.get("/requests", dependencies=[Depends(get_current_user)])
 def requests_list(
