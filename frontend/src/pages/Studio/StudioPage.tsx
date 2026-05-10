@@ -8,12 +8,12 @@ import { TemplateGallery } from './TemplateGallery/TemplateGallery';
 
 export function StudioPage() {
   const { token } = useAuthStore();
-  const hasNodes = useGraphStore(s => s.nodes.length > 0);
+  const canvasReady = useGraphStore(s => s.canvasReady);
 
   return (
     <div className="flex flex-col h-full bg-surface">
       <Toolbar />
-      {hasNodes ? (
+      {canvasReady ? (
         <div className="flex flex-1 overflow-hidden">
           <NodePanel />
           <Canvas />

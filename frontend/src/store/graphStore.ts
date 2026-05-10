@@ -21,6 +21,7 @@ interface GraphStore {
   selectedNodeId: string | null;
   projectName: string;
   validationErrors: ValidationError[];
+  canvasReady: boolean;
 
   onNodesChange: (changes: NodeChange<AppFlowNode>[]) => void;
   onEdgesChange: (changes: EdgeChange[]) => void;
@@ -48,6 +49,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
   selectedNodeId: null,
   projectName: 'my-agent',
   validationErrors: [],
+  canvasReady: false,
 
   onNodesChange: (changes) => {
     set((s) => ({ nodes: applyNodeChanges(changes, s.nodes) }));
@@ -182,6 +184,7 @@ export const useGraphStore = create<GraphStore>((set, get) => ({
       projectName: project.name,
       selectedNodeId: null,
       validationErrors: [],
+      canvasReady: true,
     });
   },
 }));
