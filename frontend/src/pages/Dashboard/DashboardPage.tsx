@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { fetchDashboard } from '../../api/dcm';
+import { getAgentsUsage, type UsageStats } from '../../api/engine';
 import { useAuthStore } from '../../store/authStore';
+import { useAwsCredsStore } from '../../store/awsCredentialsStore';
+import { useMockModeStore } from '../../store/mockModeStore';
 import type { DashboardData } from '../../types/dcm';
 import { useT } from '../../hooks/useT';
 
@@ -20,6 +23,12 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const creds = useAwsCredsStore();
+  const { mockMode } = useMockModeStore();
+  const [usage, setUsage] = useState<UsageStats | null>(null);
+  const [usageLoading, setUsageLoading] = useState(true);
+  const [usageError, setUsageError] = useState('');
+
   useEffect(() => {
     if (!token) return;
     fetchDashboard(token)
@@ -27,6 +36,20 @@ export function DashboardPage() {
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
   }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    setUsageLoading(true);
+    setUsageError('');
+    getAgentsUsage(
+      { aws_region: creds.region, aws_access_key_id: creds.accessKeyId, aws_secret_access_key: creds.secretAccessKey, aws_session_token: creds.sessionToken },
+      token,
+      1440,
+    )
+      .then(setUsage)
+      .catch(e => setUsageError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setUsageLoading(false));
+  }, [token, creds.region, creds.accessKeyId, creds.secretAccessKey, creds.sessionToken]);
 
   if (loading) {
     return (
@@ -113,7 +136,7 @@ export function DashboardPage() {
         </div>
 
         {/* Recent activity */}
-        <div className="col-span-3 card">
+        <div className="col-span-3 card" id="recent-activity">
           <div className="p-5 border-b border-gray-100">
             <h3 className="text-sm font-semibold text-gray-700">{t.dashboard.recent}</h3>
           </div>
@@ -158,6 +181,63 @@ export function DashboardPage() {
             </table>
           )}
         </div>
+      </div>
+
+      {/* Agents section */}
+      <div className="mt-10">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-800">{t.dashboard.agents_section}</h2>
+          <Link to="/agents-catalog" className="text-xs text-orange-600 hover:underline font-semibold">
+            {t.dashboard.agents_view_catalog}
+          </Link>
+        </div>
+
+        {usageLoading ? (
+          <div className="grid grid-cols-4 gap-5">
+            {[0, 1, 2, 3].map(i => (
+              <div key={i} className="card p-5">
+                <div className="h-3 w-24 bg-gray-100 rounded animate-pulse mb-3" />
+                <div className="h-8 w-16 bg-gray-100 rounded animate-pulse" />
+              </div>
+            ))}
+          </div>
+        ) : usageError ? (
+          <div className="card p-4 text-sm text-gray-400">{t.dashboard.agents_load_error}</div>
+        ) : usage ? (
+          <div className="grid grid-cols-4 gap-5">
+            <div className="card metric-card p-5">
+              <div className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">{t.dashboard.agents_total}</div>
+              <div className="text-3xl font-extrabold text-gray-800">{usage.total_agents}</div>
+            </div>
+
+            <div className="card metric-card p-5">
+              <div className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">{t.dashboard.agents_active}</div>
+              <div className="text-3xl font-extrabold text-green-600">{usage.by_status.ACTIVE ?? 0}</div>
+            </div>
+
+            <div className="card metric-card p-5">
+              <div className="text-xs text-gray-400 font-semibold uppercase tracking-wider mb-2">{t.dashboard.agents_failed}</div>
+              <div className={`text-3xl font-extrabold ${(usage.by_status.FAILED ?? 0) > 0 ? 'text-red-600' : 'text-gray-300'}`}>
+                {usage.by_status.FAILED ?? 0}
+              </div>
+            </div>
+
+            <div className="card metric-card p-5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">{t.dashboard.agents_invocations_24h}</span>
+                {mockMode && (
+                  <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 uppercase">
+                    {t.dashboard.agents_demo}
+                  </span>
+                )}
+              </div>
+              <div className="text-3xl font-extrabold text-blue-600">{usage.total_invocations_window.toLocaleString()}</div>
+              <div className="text-xs text-gray-400 mt-1 font-mono">
+                {usage.avg_latency_ms != null ? `${usage.avg_latency_ms}ms ${t.dashboard.agents_avg_latency}` : '—'}
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

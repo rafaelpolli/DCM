@@ -474,6 +474,89 @@ def invoke_agent(req: InvokeAgentRequest) -> InvokeAgentResult:
         raise HTTPException(status_code=502, detail={"message": str(e)}) from e
 
 
+class UsageStatsRequest(_AwsCredsRequest):
+    minutes: int = Field(1440, ge=1, le=10080)
+
+
+class UsageStats(BaseModel):
+    total_agents: int
+    by_status: dict[str, int]
+    total_invocations_window: int
+    avg_latency_ms: float | None = None
+    window_minutes: int
+
+
+@app.post("/runtimes/usage")
+def runtimes_usage(req: UsageStatsRequest) -> UsageStats:
+    """Aggregate stats across all deployed agents: status breakdown + invocations + avg latency.
+
+    In real mode: lists agents, then queries CloudWatch traces per-agent (filtered to
+    `span_type == "agent.invoke"`) and aggregates. In mock mode: returns fixture.
+    """
+    if mocks.is_mock_mode():
+        return UsageStats(**mocks.usage_stats(req.minutes))
+    try:
+        agentcore = _boto_client("bedrock-agentcore-control", req)
+        list_resp = agentcore.list_agent_runtimes()
+        agents = list_resp.get("agentRuntimes", [])
+
+        by_status: dict[str, int] = {}
+        for a in agents:
+            s = a.get("status", "UNKNOWN")
+            by_status[s] = by_status.get(s, 0) + 1
+
+        logs = _boto_client("logs", req)
+        end_time = int(time.time())
+        start_time = end_time - req.minutes * 60
+        total_invocations = 0
+        latencies: list[int] = []
+
+        for a in agents:
+            name = a.get("agentRuntimeName") or a.get("agentRuntimeId", "")
+            if not name:
+                continue
+            log_group = f"/aws/bedrock/agentcore/{name}"
+            try:
+                start = logs.start_query(
+                    logGroupName=log_group,
+                    startTime=start_time,
+                    endTime=end_time,
+                    queryString=(
+                        "fields duration_ms, span_type "
+                        "| filter span_type = 'agent.invoke' "
+                        "| limit 500"
+                    ),
+                )
+                qid = start["queryId"]
+                for _ in range(20):
+                    time.sleep(0.5)
+                    qresp = logs.get_query_results(queryId=qid)
+                    if qresp["status"] in ("Complete", "Failed", "Cancelled"):
+                        break
+                for row in qresp.get("results", []):
+                    fields = {f["field"]: f["value"] for f in row}
+                    total_invocations += 1
+                    dur = fields.get("duration_ms")
+                    if dur:
+                        try:
+                            latencies.append(int(dur))
+                        except (ValueError, TypeError):
+                            pass
+            except (BotoCoreError, ClientError):
+                continue
+
+        avg_latency = round(sum(latencies) / len(latencies), 1) if latencies else None
+        return UsageStats(
+            total_agents=len(agents),
+            by_status=by_status,
+            total_invocations_window=total_invocations,
+            avg_latency_ms=avg_latency,
+            window_minutes=req.minutes,
+        )
+    except (BotoCoreError, ClientError) as e:
+        raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Git integration
 # ─────────────────────────────────────────────────────────────────────────────

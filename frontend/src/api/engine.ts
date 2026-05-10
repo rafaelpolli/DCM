@@ -171,6 +171,18 @@ export function getAgentStatus(agent_runtime_id: string, creds: AwsCredsBody, to
   return postJson<AgentStatusResult>('/agents/runtimes/status', { ...cleanCredsBody(creds), agent_runtime_id }, token);
 }
 
+export interface UsageStats {
+  total_agents: number;
+  by_status: Record<string, number>;
+  total_invocations_window: number;
+  avg_latency_ms: number | null;
+  window_minutes: number;
+}
+
+export function getAgentsUsage(creds: AwsCredsBody, token: string, minutes = 1440): Promise<UsageStats> {
+  return postJson<UsageStats>('/agents/runtimes/usage', { ...cleanCredsBody(creds), minutes }, token);
+}
+
 export function invokeAgentRuntime(
   agent_runtime_arn: string,
   input_text: string,

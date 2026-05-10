@@ -180,6 +180,24 @@ def query_traces(agent_name: str, minutes: int) -> dict:
     }
 
 
+# ── Aggregate usage stats fixture ────────────────────────────────────────────
+
+def usage_stats(minutes: int) -> dict:
+    by_status: dict[str, int] = {}
+    for a in MOCK_AGENTS:
+        s = a["status"]
+        by_status[s] = by_status.get(s, 0) + 1
+    # Stable but realistic-looking numbers based on window
+    invocations = max(1, int(247 * (minutes / 1440)))
+    return {
+        "total_agents": len(MOCK_AGENTS),
+        "by_status": by_status,
+        "total_invocations_window": invocations,
+        "avg_latency_ms": 432.7,
+        "window_minutes": minutes,
+    }
+
+
 # ── Preview (Bedrock InvokeModel) fixture ────────────────────────────────────
 
 def preview_node(model_id: str, input_text: str) -> dict:
