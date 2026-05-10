@@ -4,10 +4,12 @@ import { fetchRequests } from '../../api/dcm';
 import { useAuthStore } from '../../store/authStore';
 import { StatusBadge } from '../../components/shared/StatusBadge';
 import type { ChangeRequest } from '../../types/dcm';
+import { useT } from '../../hooks/useT';
 
 export function RequestsListPage() {
   const { token } = useAuthStore();
   const navigate = useNavigate();
+  const t = useT();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [requests, setRequests] = useState<ChangeRequest[]>([]);
@@ -29,14 +31,14 @@ export function RequestsListPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Solicitacoes</h1>
-          <p className="text-sm text-gray-400 mt-1">Solicitacoes de mudanca de contratos</p>
+          <h1 className="text-2xl font-extrabold text-gray-900">{t.requests.title}</h1>
+          <p className="text-sm text-gray-400 mt-1">{t.requests.subtitle}</p>
         </div>
       </div>
 
       {/* Filters */}
       <div className="card p-4 mb-5 flex items-center gap-4">
-        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Filtrar:</span>
+        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{t.requests.filter}</span>
         <select
           value={statusFilter}
           onChange={e => {
@@ -46,14 +48,14 @@ export function RequestsListPage() {
           }}
           className="text-xs font-mono bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-gray-500 outline-none"
         >
-          <option value="">Todos</option>
-          <option value="OPEN">Open</option>
-          <option value="APPROVED">Approved</option>
-          <option value="REJECTED">Rejected</option>
+          <option value="">{t.requests.all}</option>
+          <option value="OPEN">{t.requests.open}</option>
+          <option value="APPROVED">{t.requests.approved}</option>
+          <option value="REJECTED">{t.requests.rejected}</option>
         </select>
         {statusFilter && (
           <button onClick={() => setSearchParams({})} className="text-xs text-brand hover:underline">
-            Limpar
+            {t.requests.clear}
           </button>
         )}
       </div>
@@ -61,13 +63,13 @@ export function RequestsListPage() {
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="w-2 h-2 rounded-full bg-brand animate-pulse" />
-          <span className="ml-3 text-sm text-gray-400">Carregando...</span>
+          <span className="ml-3 text-sm text-gray-400">{t.requests.loading}</span>
         </div>
       ) : error ? (
         <div className="card p-8 text-center text-red-500 text-sm">{error}</div>
       ) : requests.length === 0 ? (
         <div className="card p-12 text-center">
-          <div className="text-gray-400 text-sm mb-2">Nenhuma solicitacao encontrada</div>
+          <div className="text-gray-400 text-sm mb-2">{t.requests.no_results}</div>
           <Link to="/contracts/new" className="text-brand text-sm font-semibold hover:underline">
             Criar novo contrato
           </Link>
@@ -77,12 +79,12 @@ export function RequestsListPage() {
           <table className="w-full">
             <thead>
               <tr className="text-left border-b border-gray-100">
-                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Titulo</th>
-                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Contrato</th>
-                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Tipo</th>
-                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Solicitante</th>
-                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Status</th>
-                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Data</th>
+                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.dashboard.col_request}</th>
+                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.dashboard.col_contract}</th>
+                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.dashboard.col_type}</th>
+                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.requests.requester}</th>
+                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.dashboard.col_status}</th>
+                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.dashboard.col_date}</th>
               </tr>
             </thead>
             <tbody>

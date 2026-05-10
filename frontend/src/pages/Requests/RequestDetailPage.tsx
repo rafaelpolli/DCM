@@ -4,6 +4,7 @@ import { fetchRequest, approveRequest, rejectRequest, addComment } from '../../a
 import { useAuthStore } from '../../store/authStore';
 import { showToast } from '../../components/shared/Toast';
 import type { ChangeRequest, Contract, DiffChange } from '../../types/dcm';
+import { useT } from '../../hooks/useT';
 
 const STATUS_COLORS: Record<string, [string, string]> = {
   OPEN:      ['#185FA5', '#EFF6FF'],
@@ -34,6 +35,7 @@ export function RequestDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { token, user } = useAuthStore();
 
+  const t = useT();
   const [req, setReq] = useState<ChangeRequest | null>(null);
   const [contract, setContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,7 +104,7 @@ export function RequestDetailPage() {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="w-2 h-2 rounded-full bg-brand animate-pulse" />
-        <span className="ml-3 text-sm text-gray-400">Carregando solicitação...</span>
+        <span className="ml-3 text-sm text-gray-400">{t.requestDetail.loading}</span>
       </div>
     );
   }
@@ -110,9 +112,9 @@ export function RequestDetailPage() {
   if (error || !req) {
     return (
       <div className="card p-8 text-center">
-        <div className="text-red-500 text-sm mb-2">Erro ao carregar solicitação</div>
+        <div className="text-red-500 text-sm mb-2">{t.requestDetail.error}</div>
         <div className="text-gray-400 text-xs font-mono">{error || 'Not found'}</div>
-        <Link to="/requests" className="text-brand text-sm mt-4 inline-block hover:underline">Voltar</Link>
+        <Link to="/requests" className="text-brand text-sm mt-4 inline-block hover:underline">{t.requestDetail.back}</Link>
       </div>
     );
   }
@@ -129,7 +131,7 @@ export function RequestDetailPage() {
     <div className="max-w-5xl mx-auto space-y-5">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-gray-400">
-        <Link to="/requests" className="hover:text-orange-500 transition-colors">Solicitações</Link>
+        <Link to="/requests" className="hover:text-orange-500 transition-colors">{t.requestDetail.back}</Link>
         <span>/</span>
         <span className="text-gray-600 font-mono">{req.id}</span>
       </div>
@@ -151,9 +153,9 @@ export function RequestDetailPage() {
             <h1 className="text-xl font-bold text-gray-900">{req.title}</h1>
             <p className="text-sm text-gray-500 mt-1">{req.description}</p>
             <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-gray-400">
-              <span>Solicitante: <span className="text-gray-700 font-medium">{req.requester_name}</span></span>
+              <span>{t.requestDetail.requester}: <span className="text-gray-700 font-medium">{req.requester_name}</span></span>
               <span>·</span>
-              <span>Contrato:{' '}
+              <span>{t.requestDetail.contract}:{' '}
                 <Link to={`/contracts/${req.contract_id}`}
                   className="text-orange-500 hover:underline font-mono font-medium">
                   {req.contract_name || contract?.name || req.contract_id}
@@ -169,20 +171,20 @@ export function RequestDetailPage() {
             <div className="flex flex-col gap-2 shrink-0">
               <button onClick={handleApprove} disabled={submitting}
                 className="px-4 py-2 rounded-lg text-sm font-semibold text-white bg-green-600 hover:bg-green-500 transition-colors disabled:opacity-50">
-                ✓ Aprovar
+                {t.requestDetail.approve_btn}
               </button>
               <button onClick={() => setShowRejectForm(v => !v)}
                 className="px-4 py-2 rounded-lg text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-50 transition-colors">
-                ✕ Rejeitar
+                {t.requestDetail.reject_btn}
               </button>
               {showRejectForm && (
                 <div className="w-64">
                   <textarea value={rejectText} onChange={e => setRejectText(e.target.value)}
-                    rows={3} placeholder="Justificativa..."
+                    rows={3} placeholder={t.requestDetail.reject_reason}
                     className="w-full bg-gray-50 border border-gray-200 text-gray-800 text-xs rounded-lg px-3 py-2 focus:outline-none focus:border-red-400 resize-none mb-2" />
                   <button onClick={handleReject} disabled={submitting || !rejectText.trim()}
                     className="w-full px-3 py-2 rounded-lg text-xs font-semibold text-white bg-red-600 hover:bg-red-500 disabled:opacity-50">
-                    Confirmar Rejeição
+                    {t.requestDetail.reject_confirm}
                   </button>
                 </div>
               )}
@@ -192,8 +194,8 @@ export function RequestDetailPage() {
           {(req.status === 'APPROVED' || req.status === 'REJECTED') && (
             <div className="text-xs text-gray-400 italic shrink-0">
               {req.status === 'APPROVED'
-                ? `Aprovado em ${req.updated_at}`
-                : `Rejeitado em ${req.updated_at}`}
+                ? `${t.requestDetail.approved_at} ${req.updated_at}`
+                : `${t.requestDetail.rejected_at} ${req.updated_at}`}
             </div>
           )}
         </div>
@@ -203,7 +205,7 @@ export function RequestDetailPage() {
       {changes.length > 0 && (
         <div className="card overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
-            <h2 className="text-sm font-bold text-gray-800">Diff Visual</h2>
+            <h2 className="text-sm font-bold text-gray-800">{t.requestDetail.diff_title}</h2>
             <div className="flex items-center gap-2 text-xs text-gray-400 font-mono">
               {req.diff?.version_from && (
                 <><span>v{req.diff.version_from}</span><span>→</span></>
@@ -214,10 +216,10 @@ export function RequestDetailPage() {
 
           <div className="grid grid-cols-2 divide-x divide-gray-100 text-xs font-mono">
             <div className="px-5 py-2.5 bg-gray-50 text-gray-500 font-semibold">
-              Versão atual{req.diff?.version_from ? ` (${req.diff.version_from})` : ''}
+              {t.requestDetail.current_version}{req.diff?.version_from ? ` (${req.diff.version_from})` : ''}
             </div>
             <div className="px-5 py-2.5 bg-gray-50 text-gray-500 font-semibold">
-              Versão proposta ({req.diff?.version_to})
+              {t.requestDetail.proposed_version} ({req.diff?.version_to})
             </div>
 
             {changes.map((c, i) => {
@@ -228,12 +230,12 @@ export function RequestDetailPage() {
                     <span className="text-red-500 font-bold text-sm">−</span>
                     <span>{c.field} {String(c.from)}</span>
                   </div>
-                  <div className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">campo removido</div>
+                  <div className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">{t.requestDetail.field_removed}</div>
                 </Fragment>
               );
               if (op === 'add') return (
                 <Fragment key={i}>
-                  <div className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">campo adicionado</div>
+                  <div className="px-5 py-2.5 text-gray-300 italic flex items-center border-t border-gray-100">{t.requestDetail.field_added}</div>
                   <div className="px-5 py-2.5 bg-green-50 text-green-700 flex items-center gap-2 border-t border-green-100">
                     <span className="text-green-500 font-bold text-sm">+</span>
                     <span>{c.field} {String(c.to)}</span>
@@ -257,11 +259,11 @@ export function RequestDetailPage() {
 
           <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50">
             <p className="text-xs text-gray-400">
-              {removes.length > 0 && <span className="text-red-500 font-semibold">{removes.length} campo(s) removido(s)</span>}
+              {removes.length > 0 && <span className="text-red-500 font-semibold">{removes.length} {t.requestDetail.removed_count}</span>}
               {removes.length > 0 && (adds.length > 0 || mods.length > 0) && ' · '}
-              {adds.length > 0 && <span className="text-green-600 font-semibold">{adds.length} campo(s) adicionado(s)</span>}
+              {adds.length > 0 && <span className="text-green-600 font-semibold">{adds.length} {t.requestDetail.added_count}</span>}
               {adds.length > 0 && mods.length > 0 && ' · '}
-              {mods.length > 0 && <span className="text-amber-600 font-semibold">{mods.length} propriedade(s) modificada(s)</span>}
+              {mods.length > 0 && <span className="text-amber-600 font-semibold">{mods.length} {t.requestDetail.modified_count}</span>}
             </p>
           </div>
         </div>
@@ -270,7 +272,7 @@ export function RequestDetailPage() {
       {/* Comments */}
       <div className="card overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100">
-          <h2 className="text-sm font-bold text-gray-800">Comentários</h2>
+          <h2 className="text-sm font-bold text-gray-800">{t.requestDetail.comments_title}</h2>
         </div>
 
         {req.comments?.length > 0 ? (
@@ -293,7 +295,7 @@ export function RequestDetailPage() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-8 text-gray-300">
-            <p className="text-sm">Nenhum comentário ainda</p>
+            <p className="text-sm">{t.requestDetail.no_comments}</p>
           </div>
         )}
 
@@ -306,12 +308,12 @@ export function RequestDetailPage() {
             <div className="flex-1 flex gap-2">
               <input value={commentText} onChange={e => setCommentText(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleComment(); }}
-                placeholder="Adicionar comentário..." required
+                placeholder={t.requestDetail.comment_placeholder} required
                 className="flex-1 bg-white border border-gray-200 text-gray-800 text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100" />
               <button onClick={handleComment} disabled={submitting || !commentText.trim()}
                 className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:brightness-110 disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg,#FF6200,#E05200)' }}>
-                Enviar
+                {t.requestDetail.send_comment}
               </button>
             </div>
           </div>

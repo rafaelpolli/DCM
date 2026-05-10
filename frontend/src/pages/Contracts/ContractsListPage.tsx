@@ -4,10 +4,12 @@ import { fetchContracts } from '../../api/dcm';
 import { useAuthStore } from '../../store/authStore';
 import { StatusBadge } from '../../components/shared/StatusBadge';
 import type { Contract } from '../../types/dcm';
+import { useT } from '../../hooks/useT';
 
 export function ContractsListPage() {
   const { token, user } = useAuthStore();
   const navigate = useNavigate();
+  const t = useT();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -38,15 +40,15 @@ export function ContractsListPage() {
       {/* Page header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Catalogo</h1>
-          <p className="text-sm text-gray-400 mt-1">Contratos de dados registrados</p>
+          <h1 className="text-2xl font-extrabold text-gray-900">{t.catalog.title}</h1>
+          <p className="text-sm text-gray-400 mt-1">{t.catalog.subtitle}</p>
         </div>
         {user?.role !== 'viewer' && (
           <Link to="/contracts/new" className="btn-primary no-underline">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
             </svg>
-            Novo Contrato
+            {t.catalog.new_contract}
           </Link>
         )}
       </div>
@@ -60,7 +62,7 @@ export function ContractsListPage() {
           <input
             type="text" value={query}
             onChange={e => setFilter('q', e.target.value)}
-            placeholder="Buscar contrato..."
+            placeholder={t.catalog.search_placeholder}
             className="text-sm bg-transparent border-none outline-none text-gray-700 placeholder-gray-300 w-48"
           />
         </div>
@@ -70,7 +72,7 @@ export function ContractsListPage() {
           onChange={e => setFilter('status', e.target.value)}
           className="text-xs font-mono bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-gray-500 outline-none"
         >
-          <option value="">Todos status</option>
+          <option value="">{t.catalog.all_status}</option>
           <option value="DRAFT">Draft</option>
           <option value="PENDING">Pending</option>
           <option value="APPROVED">Approved</option>
@@ -81,7 +83,7 @@ export function ContractsListPage() {
           onChange={e => setFilter('layer', e.target.value)}
           className="text-xs font-mono bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-gray-500 outline-none"
         >
-          <option value="">Todas camadas</option>
+          <option value="">{t.catalog.all_layers}</option>
           <option value="RAW">Raw</option>
           <option value="BRONZE">Bronze</option>
           <option value="SILVER">Silver</option>
@@ -92,7 +94,7 @@ export function ContractsListPage() {
             onClick={() => setSearchParams({})}
             className="text-xs text-brand hover:underline ml-auto"
           >
-            Limpar filtros
+            {t.common.clear_filters}
           </button>
         )}
       </div>
@@ -100,16 +102,16 @@ export function ContractsListPage() {
       {loading ? (
         <div className="flex items-center justify-center py-20">
           <div className="w-2 h-2 rounded-full bg-brand animate-pulse" />
-          <span className="ml-3 text-sm text-gray-400">Carregando...</span>
+          <span className="ml-3 text-sm text-gray-400">{t.catalog.loading}</span>
         </div>
       ) : error ? (
         <div className="card p-8 text-center text-red-500 text-sm">{error}</div>
       ) : contracts.length === 0 ? (
         <div className="card p-12 text-center">
-          <div className="text-gray-400 text-sm mb-2">Nenhum contrato encontrado</div>
+          <div className="text-gray-400 text-sm mb-2">{t.catalog.no_results}</div>
           {user?.role !== 'viewer' && (
             <Link to="/contracts/new" className="text-brand text-sm font-semibold hover:underline">
-              Criar primeiro contrato
+              {t.catalog.create_first}
             </Link>
           )}
         </div>
@@ -118,11 +120,11 @@ export function ContractsListPage() {
           <table className="w-full">
             <thead>
               <tr className="text-left border-b border-gray-100">
-                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Nome</th>
-                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Status</th>
-                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Camada</th>
-                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Dominio</th>
-                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Atualizado</th>
+                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.catalog.col_name}</th>
+                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.catalog.col_status}</th>
+                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.catalog.col_layer}</th>
+                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.catalog.col_domain}</th>
+                <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.catalog.col_updated}</th>
               </tr>
             </thead>
             <tbody>

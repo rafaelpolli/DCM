@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
+import { useT } from '../../hooks/useT';
+import { useLangStore } from '../../store/langStore';
 
 const TOTAL = 200;
 const CELL = 22;
@@ -90,6 +92,8 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const { login, error, clearError, token } = useAuthStore();
   const navigate = useNavigate();
+  const t = useT();
+  const { lang, setLang } = useLangStore();
 
   // Redirect if already logged in
   useEffect(() => {
@@ -244,27 +248,27 @@ export function LoginPage() {
           <div className="flex items-center gap-[14px] mb-[30px]">
             <div className="w-[54px] h-[54px] rounded-xl flex items-center justify-center shrink-0"
               style={{ background: 'linear-gradient(135deg,#FF6200,#cc4e00)' }}>
-              <span className="text-white font-extrabold text-2xl font-mono">J</span>
+              <span className="text-white font-extrabold text-2xl font-mono">{t.brand.initial}</span>
             </div>
             <div>
               <div className="text-[22px] font-extrabold tracking-[-0.6px] font-mono"
                 style={{ background: 'linear-gradient(135deg, #FF6200, #cc4e00)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                JaguarData
+                {t.brand.name}
               </div>
-              <div className="text-[11px] text-gray-400 tracking-wider uppercase mt-0.5">Data Contracts Platform</div>
+              <div className="text-[11px] text-gray-400 tracking-wider uppercase mt-0.5">{t.brand.platform}</div>
             </div>
           </div>
 
           <div className="h-px bg-[#f0ede8] mb-6" />
-          <div className="text-[15px] font-semibold text-[#1a1a1a] mb-5">Acesse sua conta</div>
+          <div className="text-[15px] font-semibold text-[#1a1a1a] mb-5">{t.login.access_account}</div>
 
           <form onSubmit={handleSubmit} autoComplete="off">
             <div className="mb-[15px]">
-              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-[.07em] mb-1.5">Usuario</label>
+              <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-[.07em] mb-1.5">{t.login.user_label}</label>
               <input
                 type="text" value={username}
                 onChange={e => setUsername(e.target.value)}
-                placeholder="ex: ana.silva"
+                placeholder={t.login.user_placeholder}
                 className="w-full px-[14px] py-[11px] rounded-[11px] border-[1.5px] border-[#e8e4de] bg-[#FAFAF8] text-sm text-[#0f0f0f] font-mono outline-none transition-all focus:border-brand focus:bg-white"
                 style={{ boxShadow: 'none' }}
                 onFocus={e => { e.target.style.boxShadow = '0 0 0 3px rgba(255,98,0,.1)'; }}
@@ -274,7 +278,7 @@ export function LoginPage() {
             </div>
             <div className="mb-[15px]">
               <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-[.07em] mb-1.5">
-                Senha <span className="font-normal text-[#d1cec9]">(demo — qualquer)</span>
+                {t.login.password_label} <span className="font-normal text-[#d1cec9]">{t.login.password_hint}</span>
               </label>
               <input
                 type="password" value={password}
@@ -305,13 +309,13 @@ export function LoginPage() {
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-[db_1.2s_infinite_ease-in-out_both]" style={{ animationDelay: '-.16s' }} />
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-[db_1.2s_infinite_ease-in-out_both]" />
                 </span>
-              ) : 'Entrar \u2192'}
+              ) : t.login.enter_btn}
             </button>
           </form>
 
           {/* Quick access chips */}
           <div className="mt-[22px] pt-[18px] border-t border-[#f0ede8]">
-            <div className="text-[10px] text-[#c4c0bb] text-center uppercase tracking-[.1em] mb-2.5">Acesso rapido</div>
+            <div className="text-[10px] text-[#c4c0bb] text-center uppercase tracking-[.1em] mb-2.5">{t.login.quick_access}</div>
             <div className="flex gap-1.5 justify-center flex-wrap">
               {[
                 { name: 'Ana Silva', user: 'ana.silva' },
@@ -330,6 +334,22 @@ export function LoginPage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Language switcher */}
+          <div className="flex items-center justify-center gap-2 mt-5 pt-4 border-t border-[#f0ede8]">
+            <button
+              onClick={() => setLang('pt')}
+              className={`text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors ${lang === 'pt' ? 'bg-orange-50 text-orange-600 border border-orange-200' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              🇧🇷 PT
+            </button>
+            <button
+              onClick={() => setLang('es')}
+              className={`text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors ${lang === 'es' ? 'bg-orange-50 text-orange-600 border border-orange-200' : 'text-gray-400 hover:text-gray-600'}`}
+            >
+              🇪🇸 ES
+            </button>
           </div>
         </div>
       </div>

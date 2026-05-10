@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { fetchDashboard } from '../../api/dcm';
 import { useAuthStore } from '../../store/authStore';
 import type { DashboardData } from '../../types/dcm';
+import { useT } from '../../hooks/useT';
 
 const LAYER_COLORS: Record<string, string> = {
   RAW: '#9ca3af',
@@ -14,6 +15,7 @@ const LAYER_COLORS: Record<string, string> = {
 export function DashboardPage() {
   const { token, user } = useAuthStore();
   const navigate = useNavigate();
+  const t = useT();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -30,7 +32,7 @@ export function DashboardPage() {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="w-2 h-2 rounded-full bg-brand animate-pulse" />
-        <span className="ml-3 text-sm text-gray-400">Carregando dashboard...</span>
+        <span className="ml-3 text-sm text-gray-400">{t.dashboard.loading}</span>
       </div>
     );
   }
@@ -38,7 +40,7 @@ export function DashboardPage() {
   if (error) {
     return (
       <div className="card p-8 text-center">
-        <div className="text-red-500 text-sm mb-2">Erro ao carregar dashboard</div>
+        <div className="text-red-500 text-sm mb-2">{t.dashboard.error}</div>
         <div className="text-gray-400 text-xs font-mono">{error}</div>
       </div>
     );
@@ -49,10 +51,10 @@ export function DashboardPage() {
   const { stats, recent } = data;
 
   const metrics = [
-    { label: 'Total Contratos', value: stats.total, color: 'text-gray-800' },
-    { label: 'Pendentes', value: stats.pending, color: 'text-blue-600' },
-    { label: 'Aprovados', value: stats.approved_this_month, color: 'text-green-600' },
-    { label: 'Campos PII', value: stats.pii_fields, color: 'text-orange-600' },
+    { label: t.dashboard.total, value: stats.total, color: 'text-gray-800' },
+    { label: t.dashboard.pending, value: stats.pending, color: 'text-blue-600' },
+    { label: t.dashboard.approved, value: stats.approved_this_month, color: 'text-green-600' },
+    { label: t.dashboard.pii_fields, value: stats.pii_fields, color: 'text-orange-600' },
   ];
 
   const maxLayer = Math.max(...Object.values(stats.by_layer), 1);
@@ -62,15 +64,15 @@ export function DashboardPage() {
       {/* Page header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-extrabold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-400 mt-1">Resumo dos contratos de dados</p>
+          <h1 className="text-2xl font-extrabold text-gray-900">{t.dashboard.title}</h1>
+          <p className="text-sm text-gray-400 mt-1">{t.dashboard.subtitle}</p>
         </div>
         {user?.role !== 'viewer' && (
           <Link to="/contracts/new" className="btn-primary no-underline">
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
             </svg>
-            Novo Contrato
+            {t.dashboard.new_contract}
           </Link>
         )}
       </div>
@@ -88,7 +90,7 @@ export function DashboardPage() {
       <div className="grid grid-cols-4 gap-5">
         {/* Layer chart */}
         <div className="card p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Distribuicao por Camada</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">{t.dashboard.by_layer}</h3>
           <div className="space-y-3">
             {Object.entries(stats.by_layer).map(([layer, count]) => (
               <div key={layer}>
@@ -113,19 +115,19 @@ export function DashboardPage() {
         {/* Recent activity */}
         <div className="col-span-3 card">
           <div className="p-5 border-b border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-700">Atividade Recente</h3>
+            <h3 className="text-sm font-semibold text-gray-700">{t.dashboard.recent}</h3>
           </div>
           {recent.length === 0 ? (
-            <div className="p-8 text-center text-sm text-gray-400">Nenhuma solicitacao recente</div>
+            <div className="p-8 text-center text-sm text-gray-400">{t.dashboard.no_recent}</div>
           ) : (
             <table className="w-full">
               <thead>
                 <tr className="text-left">
-                  <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Solicitacao</th>
-                  <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Contrato</th>
-                  <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Tipo</th>
-                  <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Status</th>
-                  <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">Data</th>
+                  <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.dashboard.col_request}</th>
+                  <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.dashboard.col_contract}</th>
+                  <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.dashboard.col_type}</th>
+                  <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.dashboard.col_status}</th>
+                  <th className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-5 py-3">{t.dashboard.col_date}</th>
                 </tr>
               </thead>
               <tbody>

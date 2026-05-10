@@ -6,6 +6,7 @@ import type { Contract, ChangeRequest, DQRule } from '../../types/dcm';
 import { ExportModal } from './ExportModal';
 import { useGraphStore } from '../../store/graphStore';
 import type { AgentNode, AgentEdge } from '../../types/graph';
+import { useT } from '../../hooks/useT';
 
 // ── Status badge colours ──────────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ export function ContractDetailPage() {
 
   const loadProject = useGraphStore(s => s.loadProject);
   const setProjectName = useGraphStore(s => s.setProjectName);
+  const t = useT();
 
   useEffect(() => {
     if (!token || !id) return;
@@ -70,7 +72,7 @@ export function ContractDetailPage() {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="w-2 h-2 rounded-full bg-brand animate-pulse" />
-        <span className="ml-3 text-sm text-gray-400">Carregando contrato...</span>
+        <span className="ml-3 text-sm text-gray-400">{t.contractDetail.loading}</span>
       </div>
     );
   }
@@ -78,9 +80,9 @@ export function ContractDetailPage() {
   if (error || !contract) {
     return (
       <div className="card p-8 text-center">
-        <div className="text-red-500 text-sm mb-2">Erro ao carregar contrato</div>
+        <div className="text-red-500 text-sm mb-2">{t.contractDetail.error}</div>
         <div className="text-gray-400 text-xs font-mono">{error || 'Not found'}</div>
-        <Link to="/contracts" className="text-brand text-sm mt-4 inline-block hover:underline">Voltar ao Catálogo</Link>
+        <Link to="/contracts" className="text-brand text-sm mt-4 inline-block hover:underline">{t.contractDetail.back_catalog}</Link>
       </div>
     );
   }
@@ -94,14 +96,14 @@ export function ContractDetailPage() {
   const dqAlert    = dq.filter(r => r.severity === 'ALERT').length;
 
   const tabs: { key: TabKey; label: string; badge?: number }[] = [
-    { key: 'overview',      label: 'Visão Geral' },
-    { key: 'schema',        label: 'Schema' },
-    { key: 'location',      label: 'Localização' },
-    { key: 'partitioning',  label: 'Particionamento' },
-    { key: 'data_quality',  label: 'Data Quality', badge: dq.length || undefined },
-    { key: 'history',       label: 'Histórico' },
-    { key: 'requests',      label: 'Solicitações' },
-    ...(isSpec ? [{ key: 'business_logic' as TabKey, label: 'Lógica de Negócio' }] : []),
+    { key: 'overview',      label: t.contractDetail.tab_overview },
+    { key: 'schema',        label: t.contractDetail.tab_schema },
+    { key: 'location',      label: t.contractDetail.tab_location },
+    { key: 'partitioning',  label: t.contractDetail.tab_partitioning },
+    { key: 'data_quality',  label: t.contractDetail.tab_dq, badge: dq.length || undefined },
+    { key: 'history',       label: t.contractDetail.tab_history },
+    { key: 'requests',      label: t.contractDetail.tab_requests },
+    ...(isSpec ? [{ key: 'business_logic' as TabKey, label: t.contractDetail.tab_business }] : []),
   ];
 
   const handleGenerateAgent = () => {
@@ -161,7 +163,7 @@ export function ContractDetailPage() {
 
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-gray-500">
-        <Link to="/contracts" className="hover:text-gray-800 transition-colors">Catálogo</Link>
+        <Link to="/contracts" className="hover:text-gray-800 transition-colors">{t.contractDetail.back_catalog}</Link>
         <span>/</span>
         <span className="font-mono text-gray-700">{contract.name}</span>
       </div>
@@ -192,7 +194,7 @@ export function ContractDetailPage() {
             {(user?.role === 'creator' || user?.role === 'admin') && (
               <Link to="/requests"
                 className="px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-900 transition-colors no-underline">
-                Solicitar Alteração
+                {t.contractDetail.request_change}
               </Link>
             )}
             {/* Export dropdown */}
@@ -202,7 +204,7 @@ export function ContractDetailPage() {
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
                 </svg>
-                Exportar
+                {t.contractDetail.export}
               </button>
               {exportDropOpen && (
                 <>
@@ -220,7 +222,7 @@ export function ContractDetailPage() {
             </div>
             <button onClick={handleGenerateAgent}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-brand border border-brand hover:bg-orange-50 transition-colors">
-              🤖 Gerar Agente
+              {t.contractDetail.generate_agent}
             </button>
           </div>
         </div>
