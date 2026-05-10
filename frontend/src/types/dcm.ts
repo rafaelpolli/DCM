@@ -1,6 +1,6 @@
 export type ContractStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
 export type RequestStatus = 'OPEN' | 'APPROVED' | 'REJECTED';
-export type RequestType = 'CREATE' | 'UPDATE' | 'DELETE' | 'AMEND' | 'SCHEMA_CHANGE' | 'SLA_CHANGE' | 'DEPRECATE';
+export type RequestType = 'CREATE' | 'UPDATE' | 'DELETE' | 'AMEND' | 'SCHEMA_CHANGE' | 'SLA_CHANGE' | 'QUALITY_CHANGE' | 'DEPRECATE';
 export type DataLayer = 'RAW' | 'BRONZE' | 'SILVER' | 'GOLD';
 export type DataFormat = 'PARQUET' | 'AVRO' | 'ORC' | 'JSON' | 'CSV' | 'DELTA';
 export type CompressionType = 'NONE' | 'SNAPPY' | 'ZSTD' | 'GZIP';

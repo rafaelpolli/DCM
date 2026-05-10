@@ -228,7 +228,7 @@ def request_create(
     if not body.title.strip():
         raise HTTPException(status_code=400, detail="Title required")
 
-    valid_types = {"AMEND", "SCHEMA_CHANGE", "SLA_CHANGE", "UPDATE", "DEPRECATE", "DELETE"}
+    valid_types = {"AMEND", "SCHEMA_CHANGE", "SLA_CHANGE", "QUALITY_CHANGE", "UPDATE", "DEPRECATE", "DELETE"}
     if body.type not in valid_types:
         raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of {sorted(valid_types)}")
 
