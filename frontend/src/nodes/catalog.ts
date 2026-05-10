@@ -302,7 +302,10 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
       { key: 'index_name', label: 'Index name', type: 'string', required: true },
       { key: 'embedding_model_id', label: 'Embedding model ID', type: 'string', required: true },
     ],
-    defaultPorts: { inputs: [], outputs: [p('retriever', 'Retriever', 'retriever')] },
+    defaultPorts: {
+      inputs: [p('vectors', 'Vectors (ingest)', 'vector')],
+      outputs: [p('retriever', 'Retriever', 'retriever')],
+    },
   },
   kb_bedrock: {
     type: 'kb_bedrock', label: 'Bedrock KB', description: 'Amazon Bedrock managed Knowledge Base.',

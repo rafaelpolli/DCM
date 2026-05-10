@@ -85,7 +85,10 @@ export const TEMPLATES: Template[] = [
           label: 'S3 Vector Store',
           position: { x: 300, y: 80 },
           config: { bucket: 'my-vectors-bucket', index_name: 'docs-index', embedding_model_id: 'amazon.titan-embed-text-v2:0' },
-          ports: { inputs: [], outputs: [{ id: 'retriever', name: 'Retriever', data_type: 'retriever' }] },
+          ports: {
+            inputs: [{ id: 'vectors', name: 'Vectors (ingest)', data_type: 'vector' }],
+            outputs: [{ id: 'retriever', name: 'Retriever', data_type: 'retriever' }],
+          },
         },
         {
           id: 'retriever-1',
@@ -205,7 +208,7 @@ export const TEMPLATES: Template[] = [
     name: 'Multi-Agent Coordinator',
     description: 'Supervisor routes tasks to specialized sub-agents. Great for complex workflows.',
     tags: ['multi-agent', 'orchestration'],
-    nodeCount: 4,
+    nodeCount: 5,
     project: {
       name: 'multi-agent',
       nodes: [
@@ -272,9 +275,18 @@ export const TEMPLATES: Template[] = [
             outputs: [{ id: 'response', name: 'Agent response', data_type: 'string' }, { id: 'tool_calls', name: 'Tool calls log', data_type: 'json' }],
           },
         },
+        {
+          id: 'output-1',
+          type: 'output',
+          label: 'Result',
+          position: { x: 820, y: 220 },
+          config: { mode: 'json', status_code: 200 },
+          ports: { inputs: [{ id: 'payload', name: 'Payload', data_type: 'any', required: true }], outputs: [] },
+        },
       ],
       edges: [
         { id: 'e1', source_node_id: 'input-1', source_port_id: 'payload', target_node_id: 'coordinator-1', target_port_id: 'task', data_type: 'any' },
+        { id: 'e2', source_node_id: 'coordinator-1', source_port_id: 'result', target_node_id: 'output-1', target_port_id: 'payload', data_type: 'json' },
       ],
     },
   },
@@ -335,13 +347,17 @@ export const TEMPLATES: Template[] = [
           label: 'S3 Vector Store',
           position: { x: 880, y: 220 },
           config: { bucket: 'my-vectors-bucket', index_name: 'docs-index', embedding_model_id: 'amazon.titan-embed-text-v2:0' },
-          ports: { inputs: [], outputs: [{ id: 'retriever', name: 'Retriever', data_type: 'retriever' }] },
+          ports: {
+            inputs: [{ id: 'vectors', name: 'Vectors (ingest)', data_type: 'vector' }],
+            outputs: [{ id: 'retriever', name: 'Retriever', data_type: 'retriever' }],
+          },
         },
       ],
       edges: [
         { id: 'e1', source_node_id: 's3-source-1', source_port_id: 'documents', target_node_id: 'parser-1', target_port_id: 'raw', data_type: 'document' },
         { id: 'e2', source_node_id: 'parser-1', source_port_id: 'document', target_node_id: 'chunker-1', target_port_id: 'documents', data_type: 'document' },
         { id: 'e3', source_node_id: 'chunker-1', source_port_id: 'chunks', target_node_id: 'embedding-1', target_port_id: 'chunks', data_type: 'document' },
+        { id: 'e4', source_node_id: 'embedding-1', source_port_id: 'vectors', target_node_id: 'kb-1', target_port_id: 'vectors', data_type: 'vector' },
       ],
     },
   },
