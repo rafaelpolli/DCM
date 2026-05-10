@@ -26,6 +26,7 @@ export interface FieldDef {
   hint?: string;
   language?: string;
   nodeFilter?: NodeRefFilter;
+  showIf?: (config: Record<string, unknown>) => boolean;
 }
 
 export interface NodeDefinition {
@@ -54,6 +55,20 @@ const p = (id: string, name: string, data_type: DataType, required = false) => (
   id, name, data_type, required,
 });
 
+function cfgValue(cfg: Record<string, unknown>, key: string): unknown {
+  const parts = key.split('.');
+  let cur: unknown = cfg;
+  for (const part of parts) {
+    if (cur == null || typeof cur !== 'object') return undefined;
+    cur = (cur as Record<string, unknown>)[part];
+  }
+  return cur;
+}
+
+const eq = (key: string, val: unknown) => (cfg: Record<string, unknown>) => cfgValue(cfg, key) === val;
+const oneOf = (key: string, vals: unknown[]) => (cfg: Record<string, unknown>) => vals.includes(cfgValue(cfg, key));
+const truthy = (key: string) => (cfg: Record<string, unknown>) => Boolean(cfgValue(cfg, key));
+
 export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
   input: {
     type: 'input', label: 'Input', description: 'Entry point for agent workflow.',
@@ -61,14 +76,14 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
     defaultConfig: { trigger: 'http' },
     configSchema: [
       { key: 'trigger', label: 'Trigger type', type: 'enum', required: true, options: ['http', 's3_event', 'sqs', 'schedule'] },
-      { key: 'http.method', label: 'HTTP method', type: 'enum', options: ['GET', 'POST', 'PUT', 'DELETE'] },
-      { key: 'http.path', label: 'HTTP path', type: 'string', placeholder: '/invoke' },
-      { key: 'http.auth', label: 'Auth', type: 'enum', options: ['none', 'jwt', 'api_key'] },
-      { key: 'schedule.expression', label: 'Cron / rate expression', type: 'string', placeholder: 'rate(5 minutes)' },
-      { key: 's3_event.bucket', label: 'S3 bucket', type: 'string' },
-      { key: 's3_event.prefix', label: 'S3 key prefix', type: 'string' },
-      { key: 'sqs.queue_url', label: 'SQS queue URL', type: 'string' },
-      { key: 'sqs.batch_size', label: 'Batch size', type: 'number', min: 1, max: 10 },
+      { key: 'http.method', label: 'HTTP method', type: 'enum', options: ['GET', 'POST', 'PUT', 'DELETE'], showIf: eq('trigger', 'http') },
+      { key: 'http.path', label: 'HTTP path', type: 'string', placeholder: '/invoke', showIf: eq('trigger', 'http') },
+      { key: 'http.auth', label: 'Auth', type: 'enum', options: ['none', 'jwt', 'api_key'], showIf: eq('trigger', 'http') },
+      { key: 'schedule.expression', label: 'Cron / rate expression', type: 'string', placeholder: 'rate(5 minutes)', required: true, showIf: eq('trigger', 'schedule') },
+      { key: 's3_event.bucket', label: 'S3 bucket', type: 'string', required: true, showIf: eq('trigger', 's3_event') },
+      { key: 's3_event.prefix', label: 'S3 key prefix', type: 'string', showIf: eq('trigger', 's3_event') },
+      { key: 'sqs.queue_url', label: 'SQS queue URL', type: 'string', required: true, showIf: eq('trigger', 'sqs') },
+      { key: 'sqs.batch_size', label: 'Batch size', type: 'number', min: 1, max: 10, showIf: eq('trigger', 'sqs') },
     ],
     defaultPorts: { inputs: [], outputs: [p('payload', 'Payload', 'json')] },
   },
@@ -79,8 +94,8 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
     configSchema: [
       { key: 'mode', label: 'Mode', type: 'enum', required: true, options: ['json', 'stream', 's3_file'] },
       { key: 'status_code', label: 'HTTP status code', type: 'number', min: 100, max: 599 },
-      { key: 's3.bucket', label: 'S3 bucket', type: 'string' },
-      { key: 's3.key_template', label: 'S3 key template', type: 'string', placeholder: 'output/{{run_id}}.json' },
+      { key: 's3.bucket', label: 'S3 bucket', type: 'string', required: true, showIf: eq('mode', 's3_file') },
+      { key: 's3.key_template', label: 'S3 key template', type: 'string', placeholder: 'output/{{run_id}}.json', required: true, showIf: eq('mode', 's3_file') },
     ],
     defaultPorts: { inputs: [p('payload', 'Payload', 'any', true)], outputs: [] },
   },
@@ -93,18 +108,18 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
       streaming: false, tools: [], memory: { enabled: false, namespace: 'default', top_k: 5, ttl_seconds: 3600 },
     },
     configSchema: [
-      { key: 'model_id', label: 'Bedrock model ID', type: 'string', placeholder: 'anthropic.claude-3-5-sonnet-20241022-v2:0' },
-      { key: 'inference_profile_arn', label: 'Inference profile ARN', type: 'string', hint: 'Takes precedence over model ID.' },
+      { key: 'model_id', label: 'Bedrock model ID', type: 'string', required: true, placeholder: 'anthropic.claude-3-5-sonnet-20241022-v2:0', hint: 'Required unless an inference profile ARN is set.' },
+      { key: 'inference_profile_arn', label: 'Inference profile ARN', type: 'string', hint: 'Takes precedence over model ID. Required for cross-region inference.' },
       { key: 'system_prompt', label: 'System prompt', type: 'textarea', required: true },
       { key: 'temperature', label: 'Temperature', type: 'number', min: 0, max: 1, step: 0.1 },
       { key: 'max_tokens', label: 'Max tokens', type: 'number', min: 1, max: 200000 },
       { key: 'streaming', label: 'Streaming', type: 'boolean' },
       { key: 'guardrails.guardrail_id', label: 'Guardrail ID', type: 'string' },
-      { key: 'guardrails.guardrail_version', label: 'Guardrail version', type: 'string' },
+      { key: 'guardrails.guardrail_version', label: 'Guardrail version', type: 'string', required: true, showIf: truthy('guardrails.guardrail_id') },
       { key: 'memory.enabled', label: 'AgentCore Memory enabled', type: 'boolean' },
-      { key: 'memory.namespace', label: 'Memory namespace', type: 'string', placeholder: 'default' },
-      { key: 'memory.top_k', label: 'Memory recall top_k', type: 'number', min: 1, max: 50 },
-      { key: 'memory.ttl_seconds', label: 'Memory event expiry (seconds)', type: 'number', min: 60 },
+      { key: 'memory.namespace', label: 'Memory namespace', type: 'string', placeholder: 'default', showIf: truthy('memory.enabled') },
+      { key: 'memory.top_k', label: 'Memory recall top_k', type: 'number', min: 1, max: 50, showIf: truthy('memory.enabled') },
+      { key: 'memory.ttl_seconds', label: 'Memory event expiry (seconds)', type: 'number', min: 60, max: 2592000, hint: 'Max 30 days (2592000s).', showIf: truthy('memory.enabled') },
       { key: 'tools', label: 'Attached tools', type: 'node_ref_list', nodeFilter: 'tool' },
     ],
     defaultPorts: {
@@ -150,14 +165,14 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
     configSchema: [
       { key: 'name', label: 'Function name', type: 'string', required: true },
       { key: 'description', label: 'Description', type: 'textarea', required: true },
-      { key: 'runtime', label: 'Runtime', type: 'enum', options: ['inline', 'lambda_arn'] },
-      { key: 'inline_code', label: 'Inline code (Python)', type: 'code', language: 'python' },
-      { key: 'lambda_arn', label: 'Lambda ARN', type: 'string' },
+      { key: 'runtime', label: 'Runtime', type: 'enum', required: true, options: ['inline', 'lambda_arn'] },
+      { key: 'inline_code', label: 'Inline code (Python)', type: 'code', language: 'python', required: true, showIf: eq('runtime', 'inline') },
+      { key: 'lambda_arn', label: 'Lambda ARN', type: 'string', required: true, showIf: eq('runtime', 'lambda_arn') },
       { key: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 900 },
       { key: 'memory_mb', label: 'Memory (MB)', type: 'number', min: 128, max: 10240 },
     ],
     defaultPorts: {
-      inputs: [p('input', 'Input', 'json', true)],
+      inputs: [p('input', 'Input', 'json')],
       outputs: [p('output', 'Output', 'json')],
     },
   },
@@ -175,7 +190,7 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
       { key: 'max_rows', label: 'Max rows', type: 'number', min: 1, max: 10000 },
     ],
     defaultPorts: {
-      inputs: [p('params', 'Query parameters', 'json', true)],
+      inputs: [p('params', 'Query parameters', 'json')],
       outputs: [p('results', 'Query results', 'json')],
     },
   },
@@ -191,7 +206,7 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
       { key: 'key_template', label: 'Key template', type: 'string', placeholder: 'data/{{variable}}.json' },
     ],
     defaultPorts: {
-      inputs: [p('input', 'Input', 'any', true)],
+      inputs: [p('input', 'Input', 'any')],
       outputs: [p('output', 'Output', 'any')],
     },
   },
@@ -205,13 +220,13 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
       { key: 'base_url', label: 'Base URL', type: 'string', required: true },
       { key: 'method', label: 'HTTP method', type: 'enum', options: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] },
       { key: 'auth.type', label: 'Auth type', type: 'enum', options: ['none', 'api_key', 'bearer', 'oauth2_client_credentials'] },
-      { key: 'auth.secret_ref', label: 'Secret reference', type: 'secret_ref' },
-      { key: 'auth.oauth2.token_url', label: 'OAuth2 token URL', type: 'string' },
-      { key: 'auth.oauth2.scope', label: 'OAuth2 scope', type: 'string' },
+      { key: 'auth.secret_ref', label: 'Secret reference', type: 'secret_ref', required: true, showIf: oneOf('auth.type', ['api_key', 'bearer', 'oauth2_client_credentials']) },
+      { key: 'auth.oauth2.token_url', label: 'OAuth2 token URL', type: 'string', required: true, showIf: eq('auth.type', 'oauth2_client_credentials') },
+      { key: 'auth.oauth2.scope', label: 'OAuth2 scope', type: 'string', showIf: eq('auth.type', 'oauth2_client_credentials') },
       { key: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 900 },
     ],
     defaultPorts: {
-      inputs: [p('request', 'Request', 'json', true)],
+      inputs: [p('request', 'Request', 'json')],
       outputs: [p('response', 'Response', 'json'), p('status_code', 'Status code', 'string')],
     },
   },
@@ -223,14 +238,14 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
       { key: 'name', label: 'Tool name', type: 'string', required: true },
       { key: 'description', label: 'Description', type: 'textarea', required: true },
       { key: 'operation', label: 'Operation', type: 'enum', required: true, options: ['invoke_model', 'invoke_agent', 'invoke_model_with_response_stream'] },
-      { key: 'model_id', label: 'Bedrock model ID', type: 'string' },
-      { key: 'inference_profile_arn', label: 'Inference profile ARN', type: 'string' },
-      { key: 'agent_id', label: 'Bedrock Agent ID', type: 'string' },
-      { key: 'agent_alias_id', label: 'Agent alias ID', type: 'string' },
+      { key: 'model_id', label: 'Bedrock model ID', type: 'string', hint: 'Required unless inference profile ARN is set.', showIf: oneOf('operation', ['invoke_model', 'invoke_model_with_response_stream']) },
+      { key: 'inference_profile_arn', label: 'Inference profile ARN', type: 'string', hint: 'Takes precedence over model ID.', showIf: oneOf('operation', ['invoke_model', 'invoke_model_with_response_stream']) },
+      { key: 'agent_id', label: 'Bedrock Agent ID', type: 'string', required: true, showIf: eq('operation', 'invoke_agent') },
+      { key: 'agent_alias_id', label: 'Agent alias ID', type: 'string', required: true, showIf: eq('operation', 'invoke_agent') },
       { key: 'timeout_seconds', label: 'Timeout (seconds)', type: 'number', min: 1, max: 900 },
     ],
     defaultPorts: {
-      inputs: [p('input', 'Input', 'json', true)],
+      inputs: [p('input', 'Input', 'json')],
       outputs: [p('output', 'Output', 'json')],
     },
   },
@@ -259,10 +274,10 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
   mcp_server: {
     type: 'mcp_server', label: 'MCP Server', description: 'MCP server on AgentCore Runtime.',
     category: 'MCP', icon: '\ud83d\udce1', categoryColor: 'border-yellow-500',
-    defaultConfig: { name: '', transport: 'stdio', tools: [], resources: [] },
+    defaultConfig: { name: '', transport: 'stdio' },
     configSchema: [
       { key: 'name', label: 'Server name', type: 'string', required: true },
-      { key: 'transport', label: 'Transport', type: 'enum', options: ['stdio', 'sse'] },
+      { key: 'transport', label: 'Transport', type: 'enum', required: true, options: ['stdio', 'sse'] },
     ],
     defaultPorts: { inputs: [], outputs: [p('server_url', 'Server URL', 'string')] },
   },
@@ -274,7 +289,7 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
       { key: 'server_url', label: 'Server URL', type: 'string', required: true },
       { key: 'transport', label: 'Transport', type: 'enum', options: ['stdio', 'sse'] },
       { key: 'auth.type', label: 'Auth type', type: 'enum', options: ['none', 'bearer'] },
-      { key: 'auth.secret_ref', label: 'Secret reference', type: 'secret_ref' },
+      { key: 'auth.secret_ref', label: 'Secret reference', type: 'secret_ref', required: true, showIf: eq('auth.type', 'bearer') },
     ],
     defaultPorts: { inputs: [], outputs: [p('tools', 'Available tools', 'json')] },
   },
@@ -409,7 +424,7 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
       { key: 'backend', label: 'Backend', type: 'enum', required: true, options: ['dynamodb'] },
       { key: 'key_expression', label: 'Cache key expression', type: 'string', required: true },
       { key: 'ttl_seconds', label: 'TTL (seconds)', type: 'number', min: 60 },
-      { key: 'table_name', label: 'DynamoDB table name', type: 'string' },
+      { key: 'table_name', label: 'DynamoDB table name', type: 'string', required: true },
     ],
     defaultPorts: {
       inputs: [p('input', 'Input', 'any', true)],

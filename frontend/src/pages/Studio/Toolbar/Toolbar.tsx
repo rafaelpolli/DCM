@@ -135,17 +135,25 @@ export function Toolbar() {
   );
 
   const onGenerate = useCallback(async () => {
-    setStatus('generating');
+    setStatus('validating');
     clearValidation();
     try {
-      await generateZip(getProject(), token!);
+      const project = getProject();
+      const validation = await validateGraph(project, token!);
+      setValidationErrors(validation.errors);
+      if (!validation.valid) {
+        setStatus('invalid');
+        return;
+      }
+      setStatus('generating');
+      await generateZip(project, token!);
       setStatus('valid');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setStatus('error');
       setErrorMsg(msg);
     }
-  }, [getProject, clearValidation, token]);
+  }, [getProject, clearValidation, setValidationErrors, token]);
 
   const btnCls = 'flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg disabled:opacity-50 transition-colors';
   const primaryBtnCls = 'flex items-center gap-1.5 px-3 py-1.5 text-sm btn-primary rounded-lg disabled:opacity-50 font-medium';
@@ -215,12 +223,14 @@ export function Toolbar() {
         <span>🔀</span> Git
       </button>
 
-      <button onClick={onValidate} disabled={status === 'validating' || status === 'generating'}
+      <button onClick={onValidate} disabled={status === 'validating' || status === 'generating' || engineHealth === 'down'}
+        title={engineHealth === 'down' ? 'Engine offline' : 'Validate graph'}
         className={btnCls}>
         <span>✓</span> Validate
       </button>
 
-      <button onClick={onGenerate} disabled={status === 'validating' || status === 'generating'}
+      <button onClick={onGenerate} disabled={status === 'validating' || status === 'generating' || engineHealth === 'down'}
+        title={engineHealth === 'down' ? 'Engine offline — cannot generate' : 'Validate then generate ZIP'}
         className={primaryBtnCls}>
         <span>⬇</span> Generate ZIP
       </button>

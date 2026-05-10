@@ -122,7 +122,9 @@ function CustomNodeInner({ data, selected, id }: NodeProps<AppFlowNode>) {
                 <PortDot port={port} />
                 <span className="text-xs text-gray-600 truncate">
                   {port.name}
-                  {port.required && <span className="text-red-500 ml-0.5">*</span>}
+                  {port.required && (
+                    <span className="text-red-500 ml-0.5" title="Required input">*</span>
+                  )}
                 </span>
               </div>
             ))}

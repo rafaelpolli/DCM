@@ -1,4 +1,4 @@
-import { useCallback, useMemo, Suspense, lazy } from 'react';
+import { useCallback, useMemo, useState, Suspense, lazy } from 'react';
 import { PromptTesterPanel } from '../PromptTester/PromptTesterPanel';
 import { useGraphStore } from '../../../store/graphStore';
 import { NODE_CATALOG, type FieldDef, type NodeRefFilter } from '../../../nodes/catalog';
@@ -26,12 +26,18 @@ interface NodeRefListFieldProps {
 function NodeRefListField({ fieldDef, currentNodeId, value, onChange }: NodeRefListFieldProps) {
   const allNodes = useGraphStore((s) => s.nodes);
   const filter = fieldDef.nodeFilter ?? 'tool';
+  const [search, setSearch] = useState('');
   const candidates = useMemo(
     () => allNodes
       .map((fn) => fn.data.node)
       .filter((n) => nodeMatchesFilter(n, currentNodeId, filter)),
     [allNodes, currentNodeId, filter],
   );
+  const visible = useMemo(() => {
+    if (!search.trim()) return candidates;
+    const q = search.toLowerCase();
+    return candidates.filter((n) => n.label.toLowerCase().includes(q) || n.id.toLowerCase().includes(q));
+  }, [candidates, search]);
   const selected = Array.isArray(value) ? (value as string[]) : [];
 
   const toggle = (id: string) => {
@@ -51,26 +57,39 @@ function NodeRefListField({ fieldDef, currentNodeId, value, onChange }: NodeRefL
   }
 
   return (
-    <div className="space-y-1 max-h-48 overflow-y-auto bg-gray-50 border border-gray-200 rounded-lg p-2">
-      {candidates.map((n) => {
-        const def = NODE_CATALOG[n.type];
-        const checked = selected.includes(n.id);
-        return (
-          <label key={n.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 rounded px-1.5 py-1">
-            <input
-              type="checkbox"
-              className="w-4 h-4 accent-brand"
-              checked={checked}
-              onChange={() => toggle(n.id)}
-            />
-            <span className="text-base leading-none">{def.icon}</span>
-            <div className="flex-1 overflow-hidden">
-              <div className="text-xs text-gray-900 truncate">{n.label}</div>
-              <div className="text-xs text-gray-400 truncate font-mono">{n.id}</div>
-            </div>
-          </label>
-        );
-      })}
+    <div className="bg-gray-50 border border-gray-200 rounded-lg p-2">
+      {candidates.length > 5 && (
+        <input
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Filter..."
+          className="w-full mb-2 bg-white border border-gray-200 rounded px-2 py-1 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-brand"
+        />
+      )}
+      <div className="space-y-1 max-h-48 overflow-y-auto">
+        {visible.length === 0 ? (
+          <div className="text-xs text-gray-400 italic px-1 py-1">No matches.</div>
+        ) : visible.map((n) => {
+          const def = NODE_CATALOG[n.type];
+          const checked = selected.includes(n.id);
+          return (
+            <label key={n.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-100 rounded px-1.5 py-1">
+              <input
+                type="checkbox"
+                className="w-4 h-4 accent-brand"
+                checked={checked}
+                onChange={() => toggle(n.id)}
+              />
+              <span className="text-base leading-none">{def.icon}</span>
+              <div className="flex-1 overflow-hidden">
+                <div className="text-xs text-gray-900 truncate">{n.label}</div>
+                <div className="text-xs text-gray-400 truncate font-mono">{n.id}</div>
+              </div>
+            </label>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -109,12 +128,21 @@ interface FieldProps {
   currentNodeId: string;
 }
 
+function isEmpty(value: unknown): boolean {
+  if (value == null) return true;
+  if (typeof value === 'string') return value.trim() === '';
+  if (Array.isArray(value)) return value.length === 0;
+  return false;
+}
+
 function Field({ fieldDef, value, onChange, currentNodeId }: FieldProps) {
   const strVal = value == null ? '' : String(value);
   const numVal = value == null ? '' : Number(value);
   const boolVal = Boolean(value);
 
-  const inputCls = 'w-full bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:border-brand focus:ring-2 focus:ring-orange-100 placeholder-gray-400';
+  const showError = fieldDef.required && fieldDef.type !== 'boolean' && isEmpty(value);
+  const borderCls = showError ? 'border-red-400 focus:border-red-500 focus:ring-red-100' : 'border-gray-200 focus:border-brand focus:ring-orange-100';
+  const inputCls = `w-full bg-white border rounded-lg px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 placeholder-gray-400 ${borderCls}`;
 
   return (
     <div className="mb-4">
@@ -140,10 +168,10 @@ function Field({ fieldDef, value, onChange, currentNodeId }: FieldProps) {
           rows={4}
         />
       ) : fieldDef.type === 'code' ? (
-        <div className="rounded-lg overflow-hidden border border-gray-200" style={{ height: 180 }}>
+        <div className="rounded-lg overflow-hidden border border-gray-200 resize-y" style={{ height: 320, minHeight: 180, maxHeight: 600 }}>
           <Suspense fallback={<div className="p-2 text-xs text-gray-400">Loading editor...</div>}>
             <MonacoEditor
-              height={180}
+              height="100%"
               language={fieldDef.language ?? 'python'}
               theme="vs"
               value={strVal}
@@ -155,6 +183,7 @@ function Field({ fieldDef, value, onChange, currentNodeId }: FieldProps) {
                 scrollBeyondLastLine: false,
                 wordWrap: 'on',
                 padding: { top: 8, bottom: 8 },
+                automaticLayout: true,
               }}
             />
           </Suspense>
@@ -165,7 +194,7 @@ function Field({ fieldDef, value, onChange, currentNodeId }: FieldProps) {
           value={strVal}
           onChange={(e) => onChange(e.target.value)}
         >
-          {!fieldDef.required && <option value="">— select —</option>}
+          <option value="">— select —</option>
           {fieldDef.options?.map((opt) => (
             <option key={opt} value={opt}>
               {opt}
@@ -201,6 +230,9 @@ function Field({ fieldDef, value, onChange, currentNodeId }: FieldProps) {
         />
       ) : null}
 
+      {showError && (
+        <p className="mt-1 text-xs text-red-500">Required field.</p>
+      )}
       {fieldDef.hint && (
         <p className="mt-1 text-xs text-gray-400">{fieldDef.hint}</p>
       )}
@@ -238,15 +270,17 @@ function NodeConfigForm({ node, onConfigChange, onLabelChange }: NodeConfigFormP
       </div>
 
       {/* Config fields */}
-      {def.configSchema.map((fieldDef) => (
-        <Field
-          key={fieldDef.key}
-          fieldDef={fieldDef}
-          value={getNestedValue(node.config, fieldDef.key)}
-          onChange={(v) => handleFieldChange(fieldDef.key, v)}
-          currentNodeId={node.id}
-        />
-      ))}
+      {def.configSchema
+        .filter((fieldDef) => !fieldDef.showIf || fieldDef.showIf(node.config))
+        .map((fieldDef) => (
+          <Field
+            key={fieldDef.key}
+            fieldDef={fieldDef}
+            value={getNestedValue(node.config, fieldDef.key)}
+            onChange={(v) => handleFieldChange(fieldDef.key, v)}
+            currentNodeId={node.id}
+          />
+        ))}
     </div>
   );
 }
@@ -340,8 +374,8 @@ export function ConfigPanel() {
           />
         )}
 
-        {/* Prompt tester — only for agent nodes */}
-        {(node.type === 'agent') && (
+        {/* Prompt tester — agent + multi-agent coordinator */}
+        {(node.type === 'agent' || node.type === 'multi_agent_coordinator') && (
           <PromptTesterPanel node={node} />
         )}
       </div>
