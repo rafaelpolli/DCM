@@ -20,6 +20,7 @@ from app.dcm.mock_data import SEED_CONTRACTS, SEED_REQUESTS
 from app.dcm.router import init_state, router as dcm_router
 from app.dcm.storage import init_database
 from app.engine.main import app as engine_app
+from app.engine.mocks import is_mock_mode
 
 
 def _cors_origins() -> list[str]:
@@ -62,4 +63,8 @@ app.mount("/api/agents", engine_app)
 @app.get("/health")
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {
+        "status": "ok",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "mock_mode": is_mock_mode(),
+    }
