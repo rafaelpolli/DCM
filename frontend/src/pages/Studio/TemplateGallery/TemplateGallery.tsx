@@ -14,6 +14,9 @@ const TAG_COLORS: Record<string, string> = {
   orchestration: 'bg-indigo-50 text-indigo-700',
   ingestion: 'bg-yellow-50 text-yellow-700',
   pipeline: 'bg-yellow-50 text-yellow-700',
+  tools: 'bg-orange-50 text-orange-700',
+  'function-calling': 'bg-orange-50 text-orange-700',
+  sql: 'bg-cyan-50 text-cyan-700',
 };
 
 const TEMPLATE_ICONS: Record<string, string> = {
@@ -21,6 +24,7 @@ const TEMPLATE_ICONS: Record<string, string> = {
   'rag-agent': '📚',
   'hitl-approval': '👤',
   'multi-agent': '🎯',
+  'agent-with-tools': '🛠️',
   'data-ingestion': '🔄',
 };
 

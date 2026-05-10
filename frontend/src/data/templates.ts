@@ -292,6 +292,96 @@ export const TEMPLATES: Template[] = [
   },
 
   {
+    id: 'agent-with-tools',
+    name: 'Agent with Tools',
+    description: 'Claude agent that calls a SQL (Athena) tool and an HTTP API tool. Tools attach via the agent config — no edges needed.',
+    tags: ['tools', 'function-calling', 'sql'],
+    nodeCount: 5,
+    project: {
+      name: 'agent-with-tools',
+      nodes: [
+        {
+          id: 'input-1',
+          type: 'input',
+          label: 'User Question',
+          position: { x: 80, y: 240 },
+          config: { trigger: 'http', 'http.method': 'POST', 'http.path': '/invoke', 'http.auth': 'none' },
+          ports: { inputs: [], outputs: [{ id: 'payload', name: 'Payload', data_type: 'json' }] },
+        },
+        {
+          id: 'tool-athena-1',
+          type: 'tool_athena',
+          label: 'Orders DB',
+          position: { x: 80, y: 60 },
+          config: {
+            name: 'query_orders',
+            description: 'Query the orders database. Filters by customer_id (string).',
+            database: 'analytics',
+            workgroup: 'primary',
+            query_template: 'SELECT order_id, total, status, created_at FROM orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 50',
+            output_location: 's3://my-athena-results/',
+            max_rows: 100,
+          },
+          ports: {
+            inputs: [{ id: 'params', name: 'Query parameters', data_type: 'json' }],
+            outputs: [{ id: 'results', name: 'Query results', data_type: 'json' }],
+          },
+        },
+        {
+          id: 'tool-http-1',
+          type: 'tool_http',
+          label: 'Shipping API',
+          position: { x: 80, y: 460 },
+          config: {
+            name: 'get_shipping_status',
+            description: 'Get shipping status for a tracking number from the carrier API.',
+            base_url: 'https://api.example-carrier.com/v1/track',
+            method: 'GET',
+            auth: { type: 'bearer', secret_ref: 'arn:aws:secretsmanager:us-east-1:123456789012:secret:carrier-api-token' },
+            timeout_seconds: 15,
+          },
+          ports: {
+            inputs: [{ id: 'request', name: 'Request', data_type: 'json' }],
+            outputs: [{ id: 'response', name: 'Response', data_type: 'json' }, { id: 'status_code', name: 'Status code', data_type: 'string' }],
+          },
+        },
+        {
+          id: 'agent-1',
+          type: 'agent',
+          label: 'Support Agent',
+          position: { x: 380, y: 240 },
+          config: {
+            model_id: 'anthropic.claude-3-5-sonnet-20241022-v2:0',
+            inference_profile_arn: '',
+            system_prompt: 'You are a customer support agent. Use the query_orders tool to look up customer order history and the get_shipping_status tool to check delivery status. Cite the data you used in your answer.',
+            temperature: 0.3,
+            max_tokens: 4096,
+            streaming: false,
+            tools: ['tool-athena-1', 'tool-http-1'],
+            memory: { enabled: false, namespace: 'default', top_k: 5, ttl_seconds: 3600 },
+          },
+          ports: {
+            inputs: [{ id: 'message', name: 'User message', data_type: 'any', required: true }, { id: 'context', name: 'Context', data_type: 'any' }],
+            outputs: [{ id: 'response', name: 'Agent response', data_type: 'string' }, { id: 'tool_calls', name: 'Tool calls log', data_type: 'json' }],
+          },
+        },
+        {
+          id: 'output-1',
+          type: 'output',
+          label: 'Reply',
+          position: { x: 660, y: 240 },
+          config: { mode: 'json', status_code: 200 },
+          ports: { inputs: [{ id: 'payload', name: 'Payload', data_type: 'any', required: true }], outputs: [] },
+        },
+      ],
+      edges: [
+        { id: 'e1', source_node_id: 'input-1', source_port_id: 'payload', target_node_id: 'agent-1', target_port_id: 'message', data_type: 'any' },
+        { id: 'e2', source_node_id: 'agent-1', source_port_id: 'response', target_node_id: 'output-1', target_port_id: 'payload', data_type: 'string' },
+      ],
+    },
+  },
+
+  {
     id: 'data-ingestion',
     name: 'Document Ingestion Pipeline',
     description: 'End-to-end S3 → parse → chunk → embed → S3 Vectors pipeline for building RAG knowledge bases.',
