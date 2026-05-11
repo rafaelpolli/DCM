@@ -11,6 +11,7 @@ import { RequestDetailPage } from './pages/Requests/RequestDetailPage';
 import { StudioPage } from './pages/Studio/StudioPage';
 import { EvalPage } from './pages/Eval/EvalPage';
 import { AgentsCatalogPage } from './pages/AgentsCatalog/AgentsCatalogPage';
+import { SecurityPage } from './pages/Security/SecurityPage';
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
           <Route path="/agents" element={<StudioPage />} />
           <Route path="/eval" element={<EvalPage />} />
           <Route path="/agents-catalog" element={<AgentsCatalogPage />} />
+          <Route path="/security" element={<SecurityPage />} />
           <Route path="/traces" element={<Navigate to="/agents-catalog" replace />} />
           <Route path="/deployments" element={<Navigate to="/agents-catalog" replace />} />
         </Route>

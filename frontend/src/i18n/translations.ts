@@ -16,6 +16,7 @@ export const translations = {
       eval: 'Avaliação',
       traces: 'Traces',
       deployments: 'Catálogo',
+      security: 'Segurança',
     },
     login: {
       access_account: 'Acesse sua conta',
@@ -180,6 +181,7 @@ export const translations = {
       eval: 'Evaluación',
       traces: 'Trazas',
       deployments: 'Catálogo',
+      security: 'Seguridad',
     },
     login: {
       access_account: 'Accede a tu cuenta',

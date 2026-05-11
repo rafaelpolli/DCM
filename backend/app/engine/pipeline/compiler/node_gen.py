@@ -30,6 +30,9 @@ def generate_node(node: Node, project: Project, node_map: dict[str, Node]) -> Co
         "mcp_server": _gen_mcp_server,   # generates mcp_server/server.py
         "code_interpreter": _gen_code_interpreter,
         "browser_tool": _gen_browser_tool,
+        "output_validator": _gen_output_validator,
+        "pii_filter": _gen_pii_filter,
+        "prompt_firewall": _gen_prompt_firewall,
     }
     generator = dispatch.get(node.type)
     if generator is None:
@@ -690,5 +693,151 @@ from ..state import AgentState
 def node_{nid}(state: AgentState) -> dict:
     """Passthrough stub for node type '{node.type}'."""
     return {{"{_state_key(nid, "output")}": state.get("{input_key}")}}
+'''
+    return CompiledFile(path=f"agent/nodes/{nid}.py", content=content)
+
+
+def _gen_output_validator(node: Node, project: Project, node_map: dict[str, Node]) -> CompiledFile:
+    """Output validator: regex blocklist + optional JSON schema."""
+    nid = node.id
+    input_key = _first_input_key(node, project.edges)
+    blocklist = node.config.get("regex_blocklist", []) or []
+    schema = node.config.get("json_schema", "") or ""
+    on_fail = node.config.get("on_fail", "block")
+    passed_key = _state_key(nid, "passed")
+    failed_key = _state_key(nid, "failed")
+    blocklist_repr = repr(list(blocklist))
+    schema_repr = repr(schema)
+
+    content = f'''\
+import json
+import re
+
+from ..state import AgentState
+
+_BLOCKLIST = [re.compile(p) for p in {blocklist_repr}]
+_SCHEMA_RAW = {schema_repr}
+_ON_FAIL = "{on_fail}"
+
+
+def _validate(payload):
+    text = payload if isinstance(payload, str) else json.dumps(payload, default=str)
+    for pat in _BLOCKLIST:
+        if pat.search(text):
+            return False, f"blocked-by-{{pat.pattern}}"
+    if _SCHEMA_RAW.strip():
+        try:
+            from jsonschema import validate as _jv
+            _jv(payload if isinstance(payload, (dict, list)) else json.loads(text), json.loads(_SCHEMA_RAW))
+        except Exception as e:  # pragma: no cover
+            return False, f"schema-violation:{{e.__class__.__name__}}"
+    return True, ""
+
+
+def node_{nid}(state: AgentState) -> dict:
+    payload = state.get("{input_key}")
+    ok, reason = _validate(payload)
+    if ok:
+        return {{"{passed_key}": payload, "{failed_key}": None}}
+    if _ON_FAIL == "warn":
+        return {{"{passed_key}": payload, "{failed_key}": reason}}
+    return {{"{passed_key}": None, "{failed_key}": reason}}
+'''
+    return CompiledFile(path=f"agent/nodes/{nid}.py", content=content)
+
+
+def _gen_pii_filter(node: Node, project: Project, node_map: dict[str, Node]) -> CompiledFile:
+    """PII redaction node — masks CPF/CNPJ/email/phone/credit_card."""
+    nid = node.id
+    input_key = _first_input_key(node, project.edges)
+    output_key = _state_key(nid, "output")
+    mask_types = node.config.get("mask_types", ["cpf", "cnpj", "email", "phone"])
+    replacement = node.config.get("replacement", "***")
+    mask_types_repr = repr(list(mask_types))
+    replacement_repr = repr(replacement)
+
+    content = f'''\
+import re
+
+from ..state import AgentState
+
+_PATTERNS = {{
+    "cpf": re.compile(r"\\b\\d{{3}}\\.?\\d{{3}}\\.?\\d{{3}}-?\\d{{2}}\\b"),
+    "cnpj": re.compile(r"\\b\\d{{2}}\\.?\\d{{3}}\\.?\\d{{3}}/?\\d{{4}}-?\\d{{2}}\\b"),
+    "email": re.compile(r"\\b[\\w.+-]+@[\\w-]+\\.[\\w.-]+\\b"),
+    "phone": re.compile(r"\\b(?:\\+?55\\s?)?\\(?\\d{{2}}\\)?\\s?9?\\d{{4}}-?\\d{{4}}\\b"),
+    "credit_card": re.compile(r"\\b(?:\\d[ -]*?){{13,19}}\\b"),
+}}
+
+_MASK_TYPES = {mask_types_repr}
+_REPLACEMENT = {replacement_repr}
+
+
+def _redact(text: str) -> str:
+    out = text
+    for k in _MASK_TYPES:
+        pat = _PATTERNS.get(k)
+        if pat:
+            out = pat.sub(_REPLACEMENT, out)
+    return out
+
+
+def node_{nid}(state: AgentState) -> dict:
+    payload = state.get("{input_key}")
+    if isinstance(payload, str):
+        cleaned = _redact(payload)
+    elif isinstance(payload, dict):
+        cleaned = {{k: _redact(v) if isinstance(v, str) else v for k, v in payload.items()}}
+    else:
+        cleaned = payload
+    return {{"{output_key}": cleaned}}
+'''
+    return CompiledFile(path=f"agent/nodes/{nid}.py", content=content)
+
+
+def _gen_prompt_firewall(node: Node, project: Project, node_map: dict[str, Node]) -> CompiledFile:
+    """Prompt firewall — flags or blocks suspicious inputs."""
+    nid = node.id
+    input_key = _first_input_key(node, project.edges)
+    clean_key = _state_key(nid, "clean")
+    flagged_key = _state_key(nid, "flagged")
+    extra = node.config.get("block_patterns", []) or []
+    extra_repr = repr(list(extra))
+
+    content = f'''\
+import re
+
+from ..state import AgentState
+
+_DEFAULT_PATTERNS = [
+    r"(?i)ignore\\s+(previous|prior|all|the\\s+above)\\s+instructions",
+    r"(?i)disregard\\s+(previous|prior|the\\s+above)",
+    r"(?i)you\\s+are\\s+now\\s+",
+    r"(?i)\\bsystem\\s*:\\s*$",
+    r"(?i)\\bdeveloper\\s+mode\\b",
+    r"(?i)\\bDAN\\b.*(do anything now)",
+    r"(?i)esquece (tudo|as instruc[oõ]es|o anterior)",
+    r"(?i)agora voc[eê] [eé]\\s",
+    r"(?i)reveal (your|the) (system|prompt|instructions)",
+    r"(?i)mostre (suas|o) (instru[cç][oõ]es|prompt|sistema)",
+]
+_PATTERNS = [re.compile(p) for p in _DEFAULT_PATTERNS + {extra_repr}]
+_BASE64_BLOB = re.compile(r"[A-Za-z0-9+/=]{{200,}}")
+
+
+def _screen(text: str):
+    matches = [p.pattern for p in _PATTERNS if p.search(text)]
+    if _BASE64_BLOB.search(text):
+        matches.append("base64-blob>200chars")
+    return matches
+
+
+def node_{nid}(state: AgentState) -> dict:
+    payload = state.get("{input_key}")
+    text = payload if isinstance(payload, str) else str(payload or "")
+    matches = _screen(text)
+    if matches:
+        return {{"{clean_key}": None, "{flagged_key}": {{"input": payload, "matches": matches}}}}
+    return {{"{clean_key}": payload, "{flagged_key}": None}}
 '''
     return CompiledFile(path=f"agent/nodes/{nid}.py", content=content)

@@ -19,6 +19,9 @@ export function PromptTesterPanel({ node }: Props) {
   const systemPrompt = (node.config.system_prompt as string | undefined) ?? '';
   const temperature = (node.config.temperature as number | undefined) ?? 0.7;
   const maxTokens = Math.min((node.config.max_tokens as number | undefined) ?? 1024, 2048);
+  const guardrails = (node.config.guardrails as { guardrail_id?: string; guardrail_version?: string } | undefined);
+  const guardrailId = guardrails?.guardrail_id || undefined;
+  const guardrailVersion = guardrails?.guardrail_version || undefined;
 
   const handleRun = async () => {
     if (!input.trim()) return;
@@ -33,6 +36,8 @@ export function PromptTesterPanel({ node }: Props) {
         max_tokens: maxTokens,
         input_text: input,
         aws_region: region,
+        guardrail_id: guardrailId,
+        guardrail_version: guardrailVersion,
       }, token!);
       setResult(res);
     } catch (e) {

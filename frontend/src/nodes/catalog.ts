@@ -7,7 +7,8 @@ export type NodeCategory =
   | 'MCP'
   | 'Knowledge Base / RAG'
   | 'Ingestion Pipelines'
-  | 'Flow Control';
+  | 'Flow Control'
+  | 'Security';
 
 export type FieldType = 'string' | 'textarea' | 'code' | 'enum' | 'boolean' | 'number' | 'secret_ref' | 'node_ref_list';
 
@@ -49,6 +50,7 @@ export const NODE_CATEGORIES: NodeCategory[] = [
   'Knowledge Base / RAG',
   'Ingestion Pipelines',
   'Flow Control',
+  'Security',
 ];
 
 const p = (id: string, name: string, data_type: DataType, required = false) => ({
@@ -434,6 +436,46 @@ export const NODE_CATALOG: Record<NodeType, NodeDefinition> = {
       outputs: [p('output', 'Output', 'any'), p('cache_hit', 'Cache hit', 'boolean')],
     },
   },
+  output_validator: {
+    type: 'output_validator', label: 'Output Validator', description: 'Regex blocklist + JSON schema validation. Routes to passed/failed.',
+    category: 'Security', icon: '✔️', categoryColor: 'border-red-500',
+    defaultConfig: { regex_blocklist: [], json_schema: '', on_fail: 'block' },
+    configSchema: [
+      { key: 'regex_blocklist', label: 'Regex blocklist (one per line)', type: 'textarea', placeholder: 'password\\s*=\\s*\\S+\nhttps?://internal\\.', hint: 'One regex per line. Match in output blocks the response.' },
+      { key: 'json_schema', label: 'JSON schema (optional)', type: 'code', language: 'json', placeholder: '{"type":"object","required":["answer"]}' },
+      { key: 'on_fail', label: 'On failure', type: 'enum', required: true, options: ['block', 'warn'] },
+    ],
+    defaultPorts: {
+      inputs: [p('input', 'Input', 'any', true)],
+      outputs: [p('passed', 'Passed', 'any'), p('failed', 'Failed', 'string')],
+    },
+  },
+  pii_filter: {
+    type: 'pii_filter', label: 'PII Filter', description: 'Mask CPF/CNPJ/email/phone/credit card via regex.',
+    category: 'Security', icon: '🔒', categoryColor: 'border-red-500',
+    defaultConfig: { mask_types: ['cpf', 'cnpj', 'email', 'phone'], direction: 'both', replacement: '***' },
+    configSchema: [
+      { key: 'mask_types', label: 'Mask types (comma separated)', type: 'string', placeholder: 'cpf,cnpj,email,phone,credit_card', hint: 'Subset of: cpf, cnpj, email, phone, credit_card' },
+      { key: 'direction', label: 'Direction', type: 'enum', required: true, options: ['input', 'output', 'both'] },
+      { key: 'replacement', label: 'Replacement string', type: 'string', placeholder: '***' },
+    ],
+    defaultPorts: {
+      inputs: [p('input', 'Input', 'any', true)],
+      outputs: [p('output', 'Cleaned', 'any')],
+    },
+  },
+  prompt_firewall: {
+    type: 'prompt_firewall', label: 'Prompt Firewall', description: 'Detect prompt injection patterns. Routes to clean/flagged.',
+    category: 'Security', icon: '🛡️', categoryColor: 'border-red-500',
+    defaultConfig: { block_patterns: [] },
+    configSchema: [
+      { key: 'block_patterns', label: 'Extra block patterns (regex, one per line)', type: 'textarea', placeholder: '(?i)forget the system prompt\n(?i)esquece tudo', hint: 'Defaults already cover common jailbreak patterns (PT+EN). Add custom here.' },
+    ],
+    defaultPorts: {
+      inputs: [p('input', 'Input', 'any', true)],
+      outputs: [p('clean', 'Clean', 'any'), p('flagged', 'Flagged', 'json')],
+    },
+  },
   logger: {
     type: 'logger', label: 'Logger', description: 'CloudWatch log entry pass-through.',
     category: 'Flow Control', icon: '\ud83d\udcdd', categoryColor: 'border-pink-500',
@@ -458,6 +500,7 @@ export const CATEGORY_NODES: Record<NodeCategory, NodeType[]> = {
   'Knowledge Base / RAG': ['kb_s3_vector', 'kb_bedrock', 'chunking', 'embedding', 'retriever'],
   'Ingestion Pipelines': ['s3_source', 'document_parser', 'ingest_pipeline'],
   'Flow Control': ['condition', 'loop', 'cache', 'logger'],
+  'Security': ['output_validator', 'pii_filter', 'prompt_firewall'],
 };
 
 export const PORT_COLORS: Record<string, string> = {

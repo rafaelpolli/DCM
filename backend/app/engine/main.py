@@ -142,6 +142,8 @@ class PreviewRequest(BaseModel):
     max_tokens: int = Field(1024, ge=1, le=8192)
     input_text: str = Field(..., min_length=1)
     aws_region: str = Field("us-east-1")
+    guardrail_id: str | None = None
+    guardrail_version: str | None = None
 
 
 class PreviewResult(BaseModel):
@@ -169,13 +171,17 @@ def preview_node(req: PreviewRequest) -> PreviewResult:
             "max_tokens": req.max_tokens,
             "temperature": req.temperature,
         }
+        invoke_kwargs = {
+            "modelId": req.model_id,
+            "body": json.dumps(body),
+            "contentType": "application/json",
+            "accept": "application/json",
+        }
+        if req.guardrail_id:
+            invoke_kwargs["guardrailIdentifier"] = req.guardrail_id
+            invoke_kwargs["guardrailVersion"] = req.guardrail_version or "DRAFT"
         t0 = time.perf_counter()
-        resp = client.invoke_model(
-            modelId=req.model_id,
-            body=json.dumps(body),
-            contentType="application/json",
-            accept="application/json",
-        )
+        resp = client.invoke_model(**invoke_kwargs)
         latency_ms = int((time.perf_counter() - t0) * 1000)
         payload = json.loads(resp["body"].read())
         text = payload.get("content", [{}])[0].get("text", "")
@@ -416,9 +422,15 @@ class InvokeAgentResult(BaseModel):
 def _invoke_agent(req: InvokeAgentRequest) -> InvokeAgentResult:
     """Internal helper — invoke an AgentCore runtime, return response text + latency."""
     import uuid
+    from datetime import datetime as _ldt
+    from . import storage as _st
     session_id = req.session_id or str(uuid.uuid4())
     if mocks.is_mock_mode():
-        return InvokeAgentResult(**mocks.invoke_agent(req.agent_runtime_arn, req.input_text, session_id))
+        result = InvokeAgentResult(**mocks.invoke_agent(req.agent_runtime_arn, req.input_text, session_id))
+        _st.log_conversation(req.agent_runtime_arn, session_id,
+                             _ldt.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+                             req.input_text, result.response_text, result.latency_ms)
+        return result
     runtime = _boto_client("bedrock-agentcore", req)
     payload = json.dumps({"prompt": req.input_text, "input": req.input_text}).encode("utf-8")
     t0 = time.perf_counter()
@@ -457,12 +469,16 @@ def _invoke_agent(req: InvokeAgentRequest) -> InvokeAgentResult:
     except (ValueError, TypeError):
         pass
 
-    return InvokeAgentResult(
+    result = InvokeAgentResult(
         response_text=str(text),
         latency_ms=latency_ms,
         session_id=session_id,
         raw={"content_type": resp.get("contentType", ""), "status_code": str(resp.get("statusCode", ""))},
     )
+    _st.log_conversation(req.agent_runtime_arn, session_id,
+                         _ldt.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+                         req.input_text, result.response_text, result.latency_ms)
+    return result
 
 
 @app.post("/runtimes/invoke")
@@ -478,12 +494,26 @@ class UsageStatsRequest(_AwsCredsRequest):
     minutes: int = Field(1440, ge=1, le=10080)
 
 
+class AgentUsageRow(BaseModel):
+    agent_runtime_id: str
+    name: str
+    status: str
+    invocations: int
+    avg_latency_ms: float | None = None
+    tokens_window: int = 0
+    estimated_cost_usd: float = 0.0
+    anomaly: bool = False
+    anomaly_reasons: list[str] = Field(default_factory=list)
+
+
 class UsageStats(BaseModel):
     total_agents: int
     by_status: dict[str, int]
     total_invocations_window: int
     avg_latency_ms: float | None = None
     window_minutes: int
+    alerts_count: int = 0
+    per_agent: list[AgentUsageRow] = Field(default_factory=list)
 
 
 @app.post("/runtimes/usage")
@@ -555,6 +585,190 @@ def runtimes_usage(req: UsageStatsRequest) -> UsageStats:
         )
     except (BotoCoreError, ClientError) as e:
         raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Security — red/blue team probes, conversations, baselines, compliance.
+# ─────────────────────────────────────────────────────────────────────────────
+
+from datetime import datetime as _dt
+from . import storage as _storage
+from .security import runner as _runner
+from .security.datasets import (
+    BIAS_PAIRS,
+    HALLUCINATION_PROBES,
+    PROMPT_INJECTION_PROBES,
+    TOOL_ABUSE_PROBES,
+)
+from .security import compliance as _compliance
+
+
+class _ProbeRequest(_AwsCredsRequest):
+    agent_runtime_arn: str
+    qualifier: str = "DEFAULT"
+
+
+def _agent_invoker(req: _ProbeRequest):
+    """Returns a function `(input_text) -> response_text` bound to this agent + creds."""
+    def call(text: str) -> str:
+        sub = InvokeAgentRequest(
+            agent_runtime_arn=req.agent_runtime_arn,
+            input_text=text,
+            qualifier=req.qualifier,
+            aws_region=req.aws_region,
+            aws_access_key_id=req.aws_access_key_id,
+            aws_secret_access_key=req.aws_secret_access_key,
+            aws_session_token=req.aws_session_token,
+        )
+        result = _invoke_agent(sub)
+        return result.response_text
+    return call
+
+
+def _now_iso() -> str:
+    return _dt.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+@app.post("/security/probes/injection")
+def probe_injection(req: _ProbeRequest) -> dict:
+    if mocks.is_mock_mode():
+        result = mocks.injection_run()
+    else:
+        try:
+            result = _runner.run_injection(_agent_invoker(req))
+        except (BotoCoreError, ClientError) as e:
+            raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+    _storage.save_probe_run(req.agent_runtime_arn, "injection", _now_iso(), result.get("pass_rate"), result)
+    return result
+
+
+@app.post("/security/probes/bias")
+def probe_bias(req: _ProbeRequest) -> dict:
+    if mocks.is_mock_mode():
+        result = mocks.bias_run()
+    else:
+        try:
+            result = _runner.run_bias(_agent_invoker(req))
+        except (BotoCoreError, ClientError) as e:
+            raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+    _storage.save_probe_run(req.agent_runtime_arn, "bias", _now_iso(), result.get("pass_rate"), result)
+    return result
+
+
+@app.post("/security/probes/hallucination")
+def probe_hallucination(req: _ProbeRequest) -> dict:
+    if mocks.is_mock_mode():
+        result = mocks.hallucination_run()
+    else:
+        try:
+            result = _runner.run_hallucination(_agent_invoker(req))
+        except (BotoCoreError, ClientError) as e:
+            raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+    _storage.save_probe_run(req.agent_runtime_arn, "hallucination", _now_iso(), result.get("pass_rate"), result)
+    return result
+
+
+@app.post("/security/probes/toxicity")
+def probe_toxicity(req: _ProbeRequest) -> dict:
+    if mocks.is_mock_mode():
+        result = mocks.toxicity_run()
+    else:
+        try:
+            result = _runner.run_toxicity(_agent_invoker(req))
+        except (BotoCoreError, ClientError) as e:
+            raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+    _storage.save_probe_run(req.agent_runtime_arn, "toxicity", _now_iso(), result.get("pass_rate"), result)
+    return result
+
+
+@app.post("/security/probes/tool-abuse")
+def probe_tool_abuse(req: _ProbeRequest) -> dict:
+    if mocks.is_mock_mode():
+        result = mocks.tool_abuse_run()
+    else:
+        try:
+            result = _runner.run_tool_abuse(_agent_invoker(req))
+        except (BotoCoreError, ClientError) as e:
+            raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+    _storage.save_probe_run(req.agent_runtime_arn, "tool_abuse", _now_iso(), result.get("pass_rate"), result)
+    return result
+
+
+class _UploadProbesRequest(_ProbeRequest):
+    suite: str = "custom"
+    prompts: list[str]
+
+
+@app.post("/security/probes/upload-csv")
+def probe_upload(req: _UploadProbesRequest) -> dict:
+    """Run injection-style classification on a custom prompt list."""
+    if mocks.is_mock_mode():
+        return mocks.injection_run()
+    try:
+        custom_probes = [
+            type("P", (), {"id": f"cust-{i:03d}", "prompt": p, "category": "custom",
+                          "expected_behavior": "refuse", "lang": "auto"})()
+            for i, p in enumerate(req.prompts) if p.strip()
+        ]
+        result = _runner.run_injection(_agent_invoker(req), custom_probes)
+    except (BotoCoreError, ClientError) as e:
+        raise HTTPException(status_code=502, detail={"message": str(e)}) from e
+    _storage.save_probe_run(req.agent_runtime_arn, req.suite, _now_iso(), result.get("pass_rate"), result)
+    return result
+
+
+# ── Conversations ──
+
+class _ConversationsRequest(_AwsCredsRequest):
+    agent_runtime_arn: str
+    limit: int = 20
+
+
+@app.post("/agents/runtimes/conversations")
+def list_conversations(req: _ConversationsRequest) -> dict:
+    if mocks.is_mock_mode():
+        return {"conversations": mocks.conversations_for(req.agent_runtime_arn, req.limit)}
+    return {"conversations": _storage.list_conversations(req.agent_runtime_arn, req.limit)}
+
+
+# ── Baselines (drift detection) ──
+
+class _BaselineSaveRequest(BaseModel):
+    agent_runtime_arn: str
+    suite: str
+    pass_rate: float | None = None
+    results: dict
+
+
+@app.post("/security/baselines/save")
+def baseline_save(req: _BaselineSaveRequest) -> dict:
+    _storage.save_baseline(req.agent_runtime_arn, req.suite, _now_iso(), req.pass_rate, req.results)
+    return {"ok": True}
+
+
+@app.get("/security/baselines/{agent_runtime_arn:path}/{suite}")
+def baseline_get(agent_runtime_arn: str, suite: str) -> dict:
+    data = _storage.get_baseline(agent_runtime_arn, suite)
+    if not data:
+        raise HTTPException(status_code=404, detail={"message": "No baseline saved"})
+    return data
+
+
+# ── Compliance checklist ──
+
+class _ComplianceRequest(_AwsCredsRequest):
+    agent_runtime_arn: str
+    project: dict | None = None  # optional graph DAG to scan for security node types
+
+
+@app.post("/security/compliance/check")
+def compliance_check(req: _ComplianceRequest) -> dict:
+    return _compliance.check(
+        agent_runtime_arn=req.agent_runtime_arn,
+        project=req.project,
+        latest_injection_pass_rate=_compliance.latest_pass_rate(req.agent_runtime_arn, "injection"),
+        conversations_logged=_compliance.has_recent_conversations(req.agent_runtime_arn),
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

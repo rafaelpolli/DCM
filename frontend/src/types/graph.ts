@@ -26,7 +26,10 @@ export type NodeType =
   | 'condition'
   | 'loop'
   | 'cache'
-  | 'logger';
+  | 'logger'
+  | 'output_validator'
+  | 'pii_filter'
+  | 'prompt_firewall';
 
 export interface Port {
   id: string;

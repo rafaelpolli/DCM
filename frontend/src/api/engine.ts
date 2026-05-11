@@ -75,6 +75,8 @@ export interface PreviewRequest {
   max_tokens: number;
   input_text: string;
   aws_region: string;
+  guardrail_id?: string;
+  guardrail_version?: string;
 }
 
 export interface PreviewResult {
@@ -171,12 +173,26 @@ export function getAgentStatus(agent_runtime_id: string, creds: AwsCredsBody, to
   return postJson<AgentStatusResult>('/agents/runtimes/status', { ...cleanCredsBody(creds), agent_runtime_id }, token);
 }
 
+export interface AgentUsageRow {
+  agent_runtime_id: string;
+  name: string;
+  status: string;
+  invocations: number;
+  avg_latency_ms: number | null;
+  tokens_window: number;
+  estimated_cost_usd: number;
+  anomaly: boolean;
+  anomaly_reasons: string[];
+}
+
 export interface UsageStats {
   total_agents: number;
   by_status: Record<string, number>;
   total_invocations_window: number;
   avg_latency_ms: number | null;
   window_minutes: number;
+  alerts_count?: number;
+  per_agent?: AgentUsageRow[];
 }
 
 export function getAgentsUsage(creds: AwsCredsBody, token: string, minutes = 1440): Promise<UsageStats> {

@@ -3,12 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import {
   listAgentRuntimes,
   getAgentStatus,
+  getAgentsUsage,
   queryTraces,
   type AgentRuntimeSummary,
   type AgentStatusResult,
+  type AgentUsageRow,
   type TraceSpan,
   type AwsCredsBody,
 } from '../../api/engine';
+import {
+  listConversations,
+  runProbeSuite,
+  checkCompliance,
+  type ConversationLog,
+  type ProbeResult,
+  type ComplianceResult,
+} from '../../api/security';
 import { useAuthStore } from '../../store/authStore';
 import { useAwsCredsStore } from '../../store/awsCredentialsStore';
 import { useMockModeStore } from '../../store/mockModeStore';
@@ -67,7 +77,12 @@ export function AgentsCatalogPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [statusByAgent, setStatusByAgent] = useState<Record<string, AgentStatusResult>>({});
   const [tracesByAgent, setTracesByAgent] = useState<Record<string, TraceSpan[]>>({});
+  const [convsByAgent, setConvsByAgent] = useState<Record<string, ConversationLog[]>>({});
+  const [securityByAgent, setSecurityByAgent] = useState<Record<string, ProbeResult>>({});
+  const [complianceByAgent, setComplianceByAgent] = useState<Record<string, ComplianceResult>>({});
   const [drawerLoading, setDrawerLoading] = useState<string | null>(null);
+  const [drawerTab, setDrawerTab] = useState<Record<string, 'status' | 'conversations' | 'security'>>({});
+  const [usageRows, setUsageRows] = useState<AgentUsageRow[]>([]);
 
   const credsBody = useCallback((): AwsCredsBody => ({
     aws_region: creds.region,
@@ -84,6 +99,11 @@ export function AgentsCatalogPage() {
       setAgents(res.agents);
       creds.setUsingIamRole(res.using_iam_role);
       setShowCredsForm(false);
+      // Fetch usage too (for anomaly + tokens + cost)
+      try {
+        const usage = await getAgentsUsage(credsBody(), token!, 1440);
+        setUsageRows(usage.per_agent ?? []);
+      } catch { /* non-fatal */ }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
@@ -93,6 +113,8 @@ export function AgentsCatalogPage() {
       setCredsProbed(true);
     }
   }, [credsBody, token, creds]);
+
+  const usageByAgent = (id: string) => usageRows.find(u => u.agent_runtime_id === id);
 
   useEffect(() => {
     if (!credsProbed) fetchAgents();
@@ -104,11 +126,12 @@ export function AgentsCatalogPage() {
       return;
     }
     setExpandedId(a.agent_runtime_id);
+    if (!drawerTab[a.agent_runtime_id]) setDrawerTab(t => ({ ...t, [a.agent_runtime_id]: 'status' }));
     if (statusByAgent[a.agent_runtime_id]) return;
 
     setDrawerLoading(a.agent_runtime_id);
     try {
-      const [status, traces] = await Promise.all([
+      const [status, traces, convs, compliance] = await Promise.all([
         getAgentStatus(a.agent_runtime_id, credsBody(), token!).catch(() => null),
         queryTraces({
           ...credsBody(),
@@ -116,9 +139,26 @@ export function AgentsCatalogPage() {
           agent_name: a.name,
           minutes: 60,
         }, token!).catch(() => null),
+        listConversations(a.agent_runtime_arn, credsBody(), token!, 20).catch(() => null),
+        checkCompliance(a.agent_runtime_arn, null, credsBody(), token!).catch(() => null),
       ]);
       if (status) setStatusByAgent(s => ({ ...s, [a.agent_runtime_id]: status }));
       if (traces) setTracesByAgent(s => ({ ...s, [a.agent_runtime_id]: traces.spans }));
+      if (convs) setConvsByAgent(s => ({ ...s, [a.agent_runtime_id]: convs.conversations }));
+      if (compliance) setComplianceByAgent(s => ({ ...s, [a.agent_runtime_arn]: compliance }));
+    } finally {
+      setDrawerLoading(null);
+    }
+  };
+
+  const runQuickInjection = async (a: AgentRuntimeSummary) => {
+    setDrawerLoading(a.agent_runtime_id);
+    try {
+      const r = await runProbeSuite('injection', a.agent_runtime_arn, credsBody(), token!);
+      setSecurityByAgent(s => ({ ...s, [a.agent_runtime_id]: r }));
+      showToast(`Probes: ${Math.round(r.pass_rate * 100)}% aprovação`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : String(e));
     } finally {
       setDrawerLoading(null);
     }
@@ -242,7 +282,9 @@ export function AgentsCatalogPage() {
                 <th className="px-4 py-3">Nome</th>
                 <th className="px-4 py-3">Runtime ID</th>
                 <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Atualizado</th>
+                <th className="px-4 py-3">Tokens 24h</th>
+                <th className="px-4 py-3">$ 24h</th>
+                <th className="px-4 py-3">Compliance</th>
                 <th className="px-4 py-3 text-right">Ações</th>
               </tr>
             </thead>
@@ -260,8 +302,40 @@ export function AgentsCatalogPage() {
                         <CopyBtn text={a.agent_runtime_id} />
                       </span>
                     </td>
-                    <td className="px-4 py-3"><StatusChip status={a.status} /></td>
-                    <td className="px-4 py-3 text-xs font-mono text-gray-500">{a.last_updated_at ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <StatusChip status={a.status} />
+                        {usageByAgent(a.agent_runtime_id)?.anomaly && (
+                          <span
+                            title={(usageByAgent(a.agent_runtime_id)?.anomaly_reasons ?? []).join('; ')}
+                            className="w-2 h-2 rounded-full bg-red-500 animate-pulse"
+                          />
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-xs font-mono text-gray-600">
+                      {usageByAgent(a.agent_runtime_id)?.tokens_window?.toLocaleString() ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-xs font-mono text-gray-600">
+                      {usageByAgent(a.agent_runtime_id)?.estimated_cost_usd != null
+                        ? `$${(usageByAgent(a.agent_runtime_id)!.estimated_cost_usd).toFixed(4)}`
+                        : '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      {complianceByAgent[a.agent_runtime_arn] ? (
+                        <span
+                          className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                            complianceByAgent[a.agent_runtime_arn].compliant
+                              ? 'bg-green-50 text-green-700 border border-green-200'
+                              : 'bg-amber-50 text-amber-700 border border-amber-200'
+                          }`}
+                        >
+                          {complianceByAgent[a.agent_runtime_arn].score}/{complianceByAgent[a.agent_runtime_arn].total}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-300">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <button
                         onClick={(e) => { e.stopPropagation(); handleTestInEval(a); }}
@@ -273,55 +347,154 @@ export function AgentsCatalogPage() {
                   </tr>
                   {expandedId === a.agent_runtime_id && (
                     <tr className="bg-gray-50/50">
-                      <td colSpan={5} className="px-6 py-5">
+                      <td colSpan={7} className="px-6 py-5">
                         {drawerLoading === a.agent_runtime_id ? (
                           <p className="text-xs text-gray-400">Carregando detalhes...</p>
                         ) : (
-                          <div className="grid grid-cols-2 gap-6">
-                            <div>
-                              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Status detalhado</h3>
-                              {statusByAgent[a.agent_runtime_id] ? (
-                                <div className="space-y-2">
-                                  {a.endpoint && (
-                                    <div>
-                                      <p className="text-xs text-gray-400">Endpoint</p>
-                                      <p className="text-xs font-mono text-gray-700 break-all">{a.endpoint}</p>
+                          <>
+                            <div className="flex items-center gap-1 mb-4 border-b border-gray-200">
+                              {(['status', 'conversations', 'security'] as const).map(t => (
+                                <button
+                                  key={t}
+                                  onClick={() => setDrawerTab(prev => ({ ...prev, [a.agent_runtime_id]: t }))}
+                                  className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                                    (drawerTab[a.agent_runtime_id] ?? 'status') === t
+                                      ? 'text-orange-600 border-b-2 border-orange-500'
+                                      : 'text-gray-500 hover:text-gray-800'
+                                  }`}
+                                >
+                                  {t === 'status' ? 'Status + Traces' : t === 'conversations' ? 'Conversas' : 'Segurança'}
+                                </button>
+                              ))}
+                            </div>
+
+                            {(drawerTab[a.agent_runtime_id] ?? 'status') === 'status' && (
+                              <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Status detalhado</h3>
+                                  {statusByAgent[a.agent_runtime_id] ? (
+                                    <div className="space-y-2">
+                                      {a.endpoint && (
+                                        <div>
+                                          <p className="text-xs text-gray-400">Endpoint</p>
+                                          <p className="text-xs font-mono text-gray-700 break-all">{a.endpoint}</p>
+                                        </div>
+                                      )}
+                                      <div>
+                                        <p className="text-xs text-gray-400">ARN</p>
+                                        <p className="text-xs font-mono text-gray-700 break-all">{a.agent_runtime_arn}</p>
+                                      </div>
+                                      <details className="text-xs mt-2">
+                                        <summary className="cursor-pointer text-gray-500 hover:text-gray-700">Resposta API bruta</summary>
+                                        <pre className="mt-2 bg-white border border-gray-200 rounded p-2 overflow-x-auto text-[10px]">
+                                          {JSON.stringify(statusByAgent[a.agent_runtime_id].raw, null, 2)}
+                                        </pre>
+                                      </details>
                                     </div>
+                                  ) : (
+                                    <p className="text-xs text-gray-400 italic">Status não disponível.</p>
                                   )}
-                                  <div>
-                                    <p className="text-xs text-gray-400">ARN</p>
-                                    <p className="text-xs font-mono text-gray-700 break-all">{a.agent_runtime_arn}</p>
-                                  </div>
-                                  <details className="text-xs mt-2">
-                                    <summary className="cursor-pointer text-gray-500 hover:text-gray-700">Resposta API bruta</summary>
-                                    <pre className="mt-2 bg-white border border-gray-200 rounded p-2 overflow-x-auto text-[10px]">
-                                      {JSON.stringify(statusByAgent[a.agent_runtime_id].raw, null, 2)}
-                                    </pre>
-                                  </details>
                                 </div>
-                              ) : (
-                                <p className="text-xs text-gray-400 italic">Status não disponível.</p>
-                              )}
-                            </div>
-                            <div>
-                              <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                                Traces recentes (60min)
-                              </h3>
-                              {tracesByAgent[a.agent_runtime_id]?.length ? (
-                                <ul className="space-y-1 max-h-48 overflow-y-auto">
-                                  {tracesByAgent[a.agent_runtime_id].slice(0, 20).map((s, i) => (
-                                    <li key={i} className="text-[11px] font-mono bg-white border border-gray-200 rounded px-2 py-1">
-                                      <span className="text-gray-400">{s.timestamp}</span>{' '}
-                                      <span className="text-purple-600">{s.span_type}</span>
-                                      {s.duration_ms != null && <span className="text-gray-500"> · {s.duration_ms}ms</span>}
-                                    </li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="text-xs text-gray-400 italic">Nenhum trace nos últimos 60min.</p>
-                              )}
-                            </div>
-                          </div>
+                                <div>
+                                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Traces recentes (60min)</h3>
+                                  {tracesByAgent[a.agent_runtime_id]?.length ? (
+                                    <ul className="space-y-1 max-h-48 overflow-y-auto">
+                                      {tracesByAgent[a.agent_runtime_id].slice(0, 20).map((s, i) => (
+                                        <li key={i} className="text-[11px] font-mono bg-white border border-gray-200 rounded px-2 py-1">
+                                          <span className="text-gray-400">{s.timestamp}</span>{' '}
+                                          <span className="text-purple-600">{s.span_type}</span>
+                                          {s.duration_ms != null && <span className="text-gray-500"> · {s.duration_ms}ms</span>}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  ) : (
+                                    <p className="text-xs text-gray-400 italic">Nenhum trace nos últimos 60min.</p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {(drawerTab[a.agent_runtime_id] ?? 'status') === 'conversations' && (
+                              <div>
+                                <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Conversas recentes</h3>
+                                {convsByAgent[a.agent_runtime_id]?.length ? (
+                                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                                    {convsByAgent[a.agent_runtime_id].map(c => (
+                                      <div key={c.id} className="bg-white border border-gray-200 rounded p-2 text-xs">
+                                        <div className="flex justify-between text-gray-400 font-mono mb-1">
+                                          <span>{c.created_at}</span>
+                                          <span>{c.latency_ms != null ? `${c.latency_ms}ms` : '—'}</span>
+                                        </div>
+                                        <p className="text-gray-700"><span className="font-semibold">User:</span> {c.input_text}</p>
+                                        <p className="text-gray-600 mt-1"><span className="font-semibold">Agent:</span> {c.response_text}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-xs text-gray-400 italic">Sem conversas registradas.</p>
+                                )}
+                              </div>
+                            )}
+
+                            {(drawerTab[a.agent_runtime_id] ?? 'status') === 'security' && (
+                              <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                  <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider">Quick injection probe</h3>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => navigate(`/security?agent=${encodeURIComponent(a.agent_runtime_arn)}`)}
+                                      className="text-xs text-orange-600 hover:underline font-semibold"
+                                    >
+                                      Abrir Segurança →
+                                    </button>
+                                    <button
+                                      onClick={() => runQuickInjection(a)}
+                                      className="text-xs bg-orange-500 hover:bg-orange-600 text-white px-3 py-1 rounded-md font-semibold"
+                                    >
+                                      ▶ Rodar
+                                    </button>
+                                  </div>
+                                </div>
+                                {securityByAgent[a.agent_runtime_id] && (
+                                  <div className="bg-white border border-gray-200 rounded p-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-sm font-semibold text-gray-700">
+                                        Pass rate: {Math.round(securityByAgent[a.agent_runtime_id].pass_rate * 100)}%
+                                      </span>
+                                      <span className="text-xs text-gray-500">
+                                        {securityByAgent[a.agent_runtime_id].total} probes ·{' '}
+                                        {securityByAgent[a.agent_runtime_id].leak_count ?? 0} leaks
+                                      </span>
+                                    </div>
+                                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full ${
+                                          securityByAgent[a.agent_runtime_id].pass_rate >= 0.85 ? 'bg-green-500' :
+                                          securityByAgent[a.agent_runtime_id].pass_rate >= 0.6 ? 'bg-yellow-500' : 'bg-red-500'
+                                        }`}
+                                        style={{ width: `${securityByAgent[a.agent_runtime_id].pass_rate * 100}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                                {complianceByAgent[a.agent_runtime_arn] && (
+                                  <div className="bg-white border border-gray-200 rounded p-3">
+                                    <p className="text-xs font-semibold text-gray-600 mb-2">
+                                      Compliance: {complianceByAgent[a.agent_runtime_arn].score}/{complianceByAgent[a.agent_runtime_arn].total}
+                                    </p>
+                                    <ul className="space-y-1">
+                                      {complianceByAgent[a.agent_runtime_arn].items.map(i => (
+                                        <li key={i.id} className="text-xs flex items-center gap-2">
+                                          <span className={i.passed ? 'text-green-600' : 'text-red-500'}>{i.passed ? '✓' : '✗'}</span>
+                                          <span className="text-gray-700">{i.title}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </>
                         )}
                       </td>
                     </tr>
