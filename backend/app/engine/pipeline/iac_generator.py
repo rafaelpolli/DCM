@@ -31,6 +31,7 @@ def generate_iac(project: Project, sorted_nodes: list[Node]) -> CompiledArtifact
     artifacts.add(_gen_outputs_tf(has_memory, has_mcp_server))
     artifacts.add(_gen_ecr_tf(agent_name))
     artifacts.add(_gen_iam_tf(agent_name, tool_nodes, has_agentcore_features, has_memory))
+    artifacts.add(_gen_vpc_tf(agent_name))
     artifacts.add(_gen_lambda_tf(agent_name, tool_nodes))
     artifacts.add(_gen_agentcore_tf(agent_name))
     artifacts.add(_gen_api_gateway_tf(agent_name))
@@ -89,11 +90,19 @@ resource "aws_ecr_lifecycle_policy" "agent" {{
 def _tool_policy_statements(n: Node) -> str:
     """Returns Terraform IAM policy statement blocks for a tool node."""
     node_type = n.type
+    # Base statements every tool Lambda needs: CloudWatch Logs plus the ENI
+    # permissions required to attach the Lambda to the private VPC (see vpc.tf).
     logs_statement = '''\
   statement {
     sid       = "CloudWatchLogs"
     actions   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
     resources = ["arn:aws:logs:*:*:*"]
+  }
+
+  statement {
+    sid       = "VPCNetworking"
+    actions   = ["ec2:CreateNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DeleteNetworkInterface"]
+    resources = ["*"]
   }'''
 
     if node_type == "tool_athena":
@@ -271,6 +280,45 @@ variable "cloudwatch_log_retention_days" {{
   type    = number
   default = 30
 }}
+
+# --- Network isolation -------------------------------------------------------
+# Agents always run in a private VPC with no internet gateway and no NAT.
+
+variable "create_vpc" {{
+  description = "Generate an isolated VPC. Set false to use an existing VPC (then set existing_subnet_ids and existing_security_group_ids)."
+  type        = bool
+  default     = true
+}}
+
+variable "vpc_cidr" {{
+  description = "CIDR for the generated VPC (used only when create_vpc = true)."
+  type        = string
+  default     = "10.0.0.0/16"
+}}
+
+variable "existing_vpc_id" {{
+  description = "Existing VPC ID — used only when create_vpc = false."
+  type        = string
+  default     = ""
+}}
+
+variable "existing_subnet_ids" {{
+  description = "Existing private subnet IDs for the agent — used only when create_vpc = false."
+  type        = list(string)
+  default     = []
+}}
+
+variable "existing_security_group_ids" {{
+  description = "Existing security group IDs for the agent — used only when create_vpc = false."
+  type        = list(string)
+  default     = []
+}}
+
+variable "egress_allowlist_cidrs" {{
+  description = "External CIDRs the agent security group may reach over HTTPS 443. Unreachable in the generated VPC (no NAT/IGW); effective only with an override VPC that provides an egress path."
+  type        = list(string)
+  default     = []
+}}
 '''
     return CompiledFile(path="infra/variables.tf", content=content)
 
@@ -309,6 +357,16 @@ output "agentcore_runtime_arn" {{
 output "agentcore_runtime_endpoint" {{
   description = "AgentCore Runtime invoke endpoint — bypass API Gateway when using A2A or SigV4 clients."
   value       = try(aws_bedrockagentcore_agent_runtime.agent.agent_runtime_endpoint, "")
+}}
+
+output "vpc_id" {{
+  description = "VPC hosting the agent (generated VPC, or the existing one when create_vpc = false)."
+  value       = var.create_vpc ? try(aws_vpc.agent[0].id, "") : var.existing_vpc_id
+}}
+
+output "agent_subnet_ids" {{
+  description = "Private subnet IDs the agent runtime and Lambdas are placed in."
+  value       = local.agent_subnet_ids
 }}
 {memory_output}{gateway_output}'''
     return CompiledFile(path="infra/outputs.tf", content=content)
@@ -417,6 +475,13 @@ data "aws_iam_policy_document" "agent_policy" {{
     actions   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
     resources = ["arn:aws:logs:*:*:*"]
   }}
+
+  # ENI management for VPC placement of the AgentCore Runtime (see vpc.tf).
+  statement {{
+    sid       = "VPCNetworking"
+    actions   = ["ec2:CreateNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DeleteNetworkInterface"]
+    resources = ["*"]
+  }}
 {agentcore_statement}{memory_statement}}}
 {tool_role_blocks}'''
     return CompiledFile(path="infra/iam.tf", content=content)
@@ -448,6 +513,12 @@ resource "aws_lambda_function" "tool_{n.id}" {{
       AGENT_NAME = var.agent_name
     }}
   }}
+
+  # Private VPC placement — no internet egress (see vpc.tf).
+  vpc_config {{
+    subnet_ids         = local.agent_subnet_ids
+    security_group_ids = local.agent_security_group_ids
+  }}
 }}
 
 resource "aws_cloudwatch_log_group" "tool_{n.id}" {{
@@ -462,6 +533,202 @@ resource "aws_cloudwatch_log_group" "tool_{n.id}" {{
 # aws_bedrockagentcore_agent_runtime that hosts the agent container.
 {tool_lambda_blocks if tool_lambda_blocks else "# No tool nodes in this graph — no tool Lambdas generated.\\n"}'''
     return CompiledFile(path="infra/lambda.tf", content=content)
+
+
+def _gen_vpc_tf(agent_name: str) -> CompiledFile:
+    """Private VPC with no internet egress for the agent runtime + tool Lambdas.
+
+    Default (create_vpc=true): generates an isolated VPC with two private
+    subnets, NO internet gateway and NO NAT gateway. AWS services are reached
+    only through PrivateLink endpoints. Egress is default-deny; the agent
+    security group permits HTTPS (443) to in-VPC endpoints and to any CIDRs
+    in var.egress_allowlist_cidrs.
+
+    Override (create_vpc=false): the customer supplies existing_subnet_ids and
+    existing_security_group_ids; this file creates no networking. The customer
+    is responsible for endpoints/routing in that VPC.
+
+    The locals agent_subnet_ids / agent_security_group_ids are the single
+    source of truth consumed by agentcore.tf and every Lambda's vpc_config.
+    """
+    content = '''\
+# Private network for the agent. No internet gateway, no NAT — agents have
+# no direct route to the internet. AWS services via PrivateLink endpoints.
+
+data "aws_availability_zones" "available" {
+  count = var.create_vpc ? 1 : 0
+  state = "available"
+}
+
+resource "aws_vpc" "agent" {
+  count                = var.create_vpc ? 1 : 0
+  cidr_block           = var.vpc_cidr
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name        = "${var.agent_name}-vpc"
+    AgentName   = var.agent_name
+    Environment = var.environment
+  }
+}
+
+resource "aws_subnet" "agent_private" {
+  count             = var.create_vpc ? 2 : 0
+  vpc_id            = aws_vpc.agent[0].id
+  cidr_block        = cidrsubnet(var.vpc_cidr, 4, count.index)
+  availability_zone = data.aws_availability_zones.available[0].names[count.index]
+
+  tags = {
+    Name = "${var.agent_name}-private-${count.index}"
+  }
+}
+
+# Route table with NO 0.0.0.0/0 route — confirms zero internet egress.
+resource "aws_route_table" "agent_private" {
+  count  = var.create_vpc ? 1 : 0
+  vpc_id = aws_vpc.agent[0].id
+
+  tags = {
+    Name = "${var.agent_name}-private-rt"
+  }
+}
+
+resource "aws_route_table_association" "agent_private" {
+  count          = var.create_vpc ? 2 : 0
+  subnet_id      = aws_subnet.agent_private[count.index].id
+  route_table_id = aws_route_table.agent_private[0].id
+}
+
+# Agent security group — egress default-deny (no egress rules = deny all).
+resource "aws_security_group" "agent" {
+  count       = var.create_vpc ? 1 : 0
+  name        = "${var.agent_name}-agent"
+  description = "Agent runtime + tool Lambdas. Egress default-deny."
+  vpc_id      = aws_vpc.agent[0].id
+
+  tags = {
+    Name = "${var.agent_name}-agent"
+  }
+}
+
+# Egress: HTTPS to in-VPC PrivateLink interface endpoints.
+resource "aws_security_group_rule" "agent_egress_vpc_https" {
+  count             = var.create_vpc ? 1 : 0
+  type              = "egress"
+  security_group_id = aws_security_group.agent[0].id
+  protocol          = "tcp"
+  from_port         = 443
+  to_port           = 443
+  cidr_blocks       = [var.vpc_cidr]
+  description       = "HTTPS to in-VPC PrivateLink endpoints"
+}
+
+# Egress: HTTPS to explicitly allowlisted external CIDRs only.
+# NOTE: in the default VPC (no NAT/IGW) these CIDRs have no route and remain
+# unreachable. The allowlist takes effect only when an override VPC
+# (create_vpc=false) supplies an egress path.
+resource "aws_security_group_rule" "agent_egress_allowlist_https" {
+  count             = var.create_vpc && length(var.egress_allowlist_cidrs) > 0 ? 1 : 0
+  type              = "egress"
+  security_group_id = aws_security_group.agent[0].id
+  protocol          = "tcp"
+  from_port         = 443
+  to_port           = 443
+  cidr_blocks       = var.egress_allowlist_cidrs
+  description       = "HTTPS to allowlisted external destinations"
+}
+
+# Security group for the VPC interface endpoints — accepts HTTPS from the VPC.
+resource "aws_security_group" "vpce" {
+  count       = var.create_vpc ? 1 : 0
+  name        = "${var.agent_name}-vpce"
+  description = "VPC interface endpoints — ingress HTTPS from within the VPC."
+  vpc_id      = aws_vpc.agent[0].id
+
+  tags = {
+    Name = "${var.agent_name}-vpce"
+  }
+}
+
+resource "aws_security_group_rule" "vpce_ingress_https" {
+  count             = var.create_vpc ? 1 : 0
+  type              = "ingress"
+  security_group_id = aws_security_group.vpce[0].id
+  protocol          = "tcp"
+  from_port         = 443
+  to_port           = 443
+  cidr_blocks       = [var.vpc_cidr]
+  description       = "HTTPS from within the VPC"
+}
+
+locals {
+  # Interface endpoints required so the agent reaches AWS APIs without internet:
+  #   bedrock-runtime   — LLM invocation
+  #   bedrock-agentcore — AgentCore Runtime/Memory/Gateway/Identity
+  #   secretsmanager    — secret retrieval
+  #   ecr.api / ecr.dkr — pull the agent container image
+  #   logs              — CloudWatch Logs
+  #   sts               — role assumption
+  interface_endpoints = var.create_vpc ? toset([
+    "bedrock-runtime",
+    "bedrock-agentcore",
+    "secretsmanager",
+    "ecr.api",
+    "ecr.dkr",
+    "logs",
+    "sts",
+  ]) : toset([])
+}
+
+resource "aws_vpc_endpoint" "interface" {
+  for_each            = local.interface_endpoints
+  vpc_id              = aws_vpc.agent[0].id
+  service_name        = "com.amazonaws.${var.aws_region}.${each.value}"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.agent_private[*].id
+  security_group_ids  = [aws_security_group.vpce[0].id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "${var.agent_name}-vpce-${each.value}"
+  }
+}
+
+# Gateway endpoints — S3 (ECR image layers + artifacts) and DynamoDB.
+resource "aws_vpc_endpoint" "s3" {
+  count             = var.create_vpc ? 1 : 0
+  vpc_id            = aws_vpc.agent[0].id
+  service_name      = "com.amazonaws.${var.aws_region}.s3"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = [aws_route_table.agent_private[0].id]
+
+  tags = {
+    Name = "${var.agent_name}-vpce-s3"
+  }
+}
+
+resource "aws_vpc_endpoint" "dynamodb" {
+  count             = var.create_vpc ? 1 : 0
+  vpc_id            = aws_vpc.agent[0].id
+  service_name      = "com.amazonaws.${var.aws_region}.dynamodb"
+  vpc_endpoint_type = "Gateway"
+  route_table_ids   = [aws_route_table.agent_private[0].id]
+
+  tags = {
+    Name = "${var.agent_name}-vpce-dynamodb"
+  }
+}
+
+# Single source of truth for the network placement of the agent runtime and
+# every Lambda. Generated VPC when create_vpc=true; customer-supplied IDs
+# otherwise.
+locals {
+  agent_subnet_ids         = var.create_vpc ? aws_subnet.agent_private[*].id : var.existing_subnet_ids
+  agent_security_group_ids = var.create_vpc ? [aws_security_group.agent[0].id] : var.existing_security_group_ids
+}
+'''
+    return CompiledFile(path="infra/vpc.tf", content=content)
 
 
 def _gen_agentcore_tf(agent_name: str) -> CompiledFile:
@@ -483,8 +750,15 @@ resource "aws_bedrockagentcore_agent_runtime" "agent" {{
     }}
   }}
 
+  # Private VPC placement — no internet egress. Subnets/SG resolved in vpc.tf
+  # (generated VPC when create_vpc=true, else customer-supplied IDs).
   network_configuration {{
-    network_mode = "PUBLIC"
+    network_mode = "VPC"
+
+    vpc_config {{
+      subnets         = local.agent_subnet_ids
+      security_groups = local.agent_security_group_ids
+    }}
   }}
 
   protocol_configuration {{
@@ -545,6 +819,11 @@ resource "aws_iam_role_policy" "mcp_server" {{
         Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
         Resource = "arn:aws:logs:*:*:*"
       }},
+      {{
+        Effect   = "Allow"
+        Action   = ["ec2:CreateNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DeleteNetworkInterface"]
+        Resource = "*"
+      }},
     ]
   }})
 }}
@@ -563,6 +842,12 @@ resource "aws_lambda_function" "mcp_server" {{
       AGENT_NAME = var.agent_name
       MCP_SERVER = "true"
     }}
+  }}
+
+  # Private VPC placement — no internet egress (see vpc.tf).
+  vpc_config {{
+    subnet_ids         = local.agent_subnet_ids
+    security_group_ids = local.agent_security_group_ids
   }}
 }}
 
@@ -697,6 +982,12 @@ resource "aws_lambda_function" "agentcore_invoker" {{
       AWS_REGION_NAME   = var.aws_region
     }}
   }}
+
+  # Private VPC placement — no internet egress (see vpc.tf).
+  vpc_config {{
+    subnet_ids         = local.agent_subnet_ids
+    security_group_ids = local.agent_security_group_ids
+  }}
 }}
 
 resource "aws_iam_role" "agentcore_invoker" {{
@@ -718,6 +1009,11 @@ resource "aws_iam_role_policy" "agentcore_invoker" {{
         Effect   = "Allow"
         Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
         Resource = "arn:aws:logs:*:*:*"
+      }},
+      {{
+        Effect   = "Allow"
+        Action   = ["ec2:CreateNetworkInterface", "ec2:DescribeNetworkInterfaces", "ec2:DeleteNetworkInterface"]
+        Resource = "*"
       }},
     ]
   }})
@@ -819,5 +1115,23 @@ latency_alarm_threshold_ms      = 5000
 cloudwatch_log_retention_days   = 30
 {memory_note}{gateway_note}# AgentCore Runtime hosts the agent container directly (no Lambda for the agent).
 # Tool nodes (if any) and the API GW invoker are the only Lambdas in this stack.
+
+# --- Network isolation -------------------------------------------------------
+# The agent always runs in a private VPC with no internet gateway and no NAT.
+# Default: Terraform generates an isolated VPC + PrivateLink endpoints.
+create_vpc                      = true
+vpc_cidr                        = "10.0.0.0/16"
+
+# Override: use an existing VPC instead of generating one. Set create_vpc=false
+# and provide the IDs below; the customer VPC must reach AWS APIs (endpoints/NAT).
+# existing_vpc_id               = ""
+# existing_subnet_ids           = []
+# existing_security_group_ids   = []
+
+# HTTPS 443 egress allowlist. NOTE: in the generated VPC there is no NAT/IGW, so
+# external CIDRs are unreachable regardless. Tools needing the public internet
+# (tool_http to external APIs, browser_tool, OAuth2 token_url) do NOT work in
+# the generated VPC — use an override VPC with an egress path for those.
+egress_allowlist_cidrs          = []
 '''
     return CompiledFile(path="infra/dev.tfvars", content=content)

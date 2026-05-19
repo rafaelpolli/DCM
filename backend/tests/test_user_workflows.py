@@ -202,6 +202,39 @@ def test_rag_agent_no_lambda_for_agent(rag_agent_project: Project):
     assert 'bedrock-agentcore:InvokeAgentRuntime' in apigw_tf
 
 
+def test_agent_runs_in_private_vpc(rag_agent_project: Project):
+    """Agents must run in a private VPC with no internet egress."""
+    result = validate(rag_agent_project)
+    iac = generate_iac(rag_agent_project, result.sorted_nodes)
+    files = iac.files
+
+    # Dedicated VPC module is emitted.
+    assert 'infra/vpc.tf' in files
+    vpc_tf = files['infra/vpc.tf']
+    assert 'aws_vpc" "agent"' in vpc_tf
+    # No internet path — confirms zero egress.
+    assert 'aws_internet_gateway' not in vpc_tf
+    assert 'aws_nat_gateway' not in vpc_tf
+    # AWS APIs reached via PrivateLink endpoints.
+    assert 'bedrock-agentcore' in vpc_tf
+    assert 'ecr.api' in vpc_tf
+    assert 'aws_vpc_endpoint' in vpc_tf
+
+    # AgentCore Runtime is placed in the VPC, not PUBLIC.
+    agentcore_tf = files['infra/agentcore.tf']
+    assert 'network_mode = "VPC"' in agentcore_tf
+    assert '"PUBLIC"' not in agentcore_tf
+    assert 'vpc_config' in agentcore_tf
+
+    # Network variables exist with create_vpc default true.
+    variables_tf = files['infra/variables.tf']
+    assert 'create_vpc' in variables_tf
+    assert 'egress_allowlist_cidrs' in variables_tf
+
+    # The API GW invoker Lambda is VPC-attached.
+    assert 'vpc_config' in files['infra/api_gateway.tf']
+
+
 def test_rag_agent_dockerfile_runs_agentcore_app(rag_agent_project: Project):
     from engine.pipeline.local_scaffold import generate_local_scaffold
     scaffold = generate_local_scaffold(rag_agent_project)

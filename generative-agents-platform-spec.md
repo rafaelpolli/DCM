@@ -2066,7 +2066,7 @@ All platform actions (project export, deploy events) and runtime AWS API calls a
 | Agent framework | LangGraph |
 | LLM abstractions | LangChain |
 | AWS integration | boto3, bedrock-agentcore |
-| Runtime host | AgentCore Runtime (container) — `BedrockAgentCoreApp` on :8080 |
+| Runtime host | AgentCore Runtime (container) — `BedrockAgentCoreApp` on :8080, `network_mode = "VPC"` (private, no internet egress) |
 | MCP server | bedrock-agentcore (`MCPServer`), exposed via AgentCore Gateway |
 | Memory | AgentCore Memory (semantic + summary + user_preference strategies) |
 | Identity / OAuth2 | AgentCore Identity (`IdentityClient.get_token`) |
@@ -2085,6 +2085,8 @@ All platform actions (project export, deploy events) and runtime AWS API calls a
 | Amazon Bedrock AgentCore Identity | M2M OAuth2 token vending for `tool_http` |
 | Amazon Bedrock AgentCore Tools | Code Interpreter + Browser sandboxes |
 | AWS Lambda | Per-tool execution + API GW invoker bridge to AgentCore Runtime |
+| Amazon VPC | Private network for the agent runtime + Lambdas — no internet gateway, no NAT |
+| AWS PrivateLink (VPC endpoints) | Reach AWS APIs (Bedrock, ECR, Secrets Manager, CloudWatch Logs, STS, S3, DynamoDB) without internet egress |
 | Amazon Bedrock | LLMs and embeddings |
 | Amazon S3 | Document storage |
 | Amazon S3 Vectors | Vector store |
@@ -2110,6 +2112,7 @@ All platform actions (project export, deploy events) and runtime AWS API calls a
 | MCP Server execution | AgentCore Runtime via AgentCore Gateway target |
 | Observability stack | AgentCore Observability → CloudWatch GenAI (LangSmith dropped) |
 | Agent runtime host | AgentCore Runtime container (no Lambda for the agent) |
+| Network isolation | All agents run in a private VPC; AgentCore Runtime uses `network_mode = "VPC"`, never `PUBLIC`. No internet gateway, no NAT — AWS APIs via PrivateLink endpoints. Engine generates the VPC (`infra/vpc.tf`) by default; `create_vpc = false` + `existing_*` variables inject a customer VPC. Egress is default-deny; `egress_allowlist_cidrs` permits HTTPS 443 to specific CIDRs. Tools needing the public internet (`tool_http` to external APIs, `browser_tool`, OAuth2 `token_url`) do not work in the generated VPC — require an override VPC with an egress path. |
 | OAuth2 token vending | AgentCore Identity (`bedrock_agentcore.identity.IdentityClient`) |
 | Test generation strategy | Unit tests only (pytest + mocks) |
 | Local simulation | Python scripts + Docker |
