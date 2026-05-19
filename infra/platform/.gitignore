@@ -1,0 +1,7 @@
+# Terraform — estado, cache e variáveis locais não vão para o repo.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+crash.log

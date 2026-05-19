@@ -1,0 +1,20 @@
+# Copie para terraform.tfvars e ajuste. O notebook deploy-sagemaker.ipynb
+# tambem gera estes valores automaticamente.
+
+aws_region   = "us-east-1"
+project_name = "jaguardata"
+vpc_cidr     = "10.20.0.0/16"
+
+# Preenchido pelo notebook apos o build da imagem (terraform output ecr_repository_url + tag).
+backend_image_uri = ""
+
+# JWT signing key. Gere um valor forte: python -c "import secrets; print(secrets.token_urlsafe(48))"
+jwt_secret = "TROQUE-POR-UM-VALOR-FORTE"
+
+# IMPORTANTE: mantenha 1. SQLite em EFS nao tolera multiplos escritores.
+# Escalar horizontalmente exige migrar para RDS antes.
+desired_count = 1
+
+# Opcional: ARN de certificado ACM para listener HTTPS no ALB.
+# Vazio = ALB so HTTP (o CloudFront ja faz TLS na borda).
+acm_certificate_arn = ""
