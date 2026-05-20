@@ -26,6 +26,12 @@ from .pipeline.iac_generator import generate_iac
 from .pipeline.local_scaffold import generate_local_scaffold
 from .pipeline.test_generator import generate_tests
 from .pipeline.validator import ValidationError, validate
+from .pipeline.ml import (
+    compile_ml_pipeline,
+    generate_iac_ml,
+    generate_ml_notebook,
+    validate_ml,
+)
 
 app = FastAPI(
     title="Generative Agents Platform — Engine",
@@ -83,6 +89,10 @@ def validate_graph(project: Project) -> dict:
 
 @app.post("/generate")
 def generate(project: Project) -> StreamingResponse:
+    # ml_pipeline projects route to the ML compilation phase (SageMaker Pipelines + endpoints).
+    if project.project_type == "ml_pipeline":
+        return _generate_ml(project)
+
     validation = validate(project)
     if not validation.valid:
         raise HTTPException(
@@ -106,6 +116,54 @@ def generate(project: Project) -> StreamingResponse:
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     filename = f"agent-{agent_name}-{timestamp}.zip"
 
+    return StreamingResponse(
+        io.BytesIO(zip_bytes),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ML Pipeline endpoints — Project.project_type == "ml_pipeline".
+# Sibling pair of /validate and /generate; routes the request through the
+# engine/pipeline/ml/ package (SageMaker Pipelines + endpoints).
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.post("/ml/validate")
+def ml_validate(project: Project) -> dict:
+    result = validate_ml(project)
+    return {
+        "valid": result.valid,
+        "errors": [e.to_dict() for e in result.errors],
+    }
+
+
+@app.post("/ml/generate")
+def ml_generate(project: Project) -> StreamingResponse:
+    # Force project_type so a misconfigured client still hits the ML pipeline.
+    project.project_type = "ml_pipeline"
+    return _generate_ml(project)
+
+
+def _generate_ml(project: Project) -> StreamingResponse:
+    validation = validate_ml(project)
+    if not validation.valid:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "ML pipeline validation failed",
+                "errors": [e.to_dict() for e in validation.errors],
+            },
+        )
+
+    artifacts = compile_ml_pipeline(project, validation.sorted_nodes)
+    artifacts.merge(generate_iac_ml(project, validation.sorted_nodes))
+    project_name = project.name.lower().replace(" ", "-")
+    artifacts.add(generate_ml_notebook(project_name))
+
+    zip_bytes = bundler.bundle(project, artifacts)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    filename = f"ml-{project_name}-{timestamp}.zip"
     return StreamingResponse(
         io.BytesIO(zip_bytes),
         media_type="application/zip",

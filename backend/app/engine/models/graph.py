@@ -17,7 +17,15 @@ NodeType = Literal[
     "mcp_server", "mcp_client",
     "code_interpreter", "browser_tool",
     "condition", "loop", "cache", "logger",
+    # ML pipeline workspace (project_type = "ml_pipeline")
+    "data_source_s3", "processing_job", "training_job",
+    "model_register", "endpoint_realtime",
 ]
+
+ML_PIPELINE_NODE_TYPES: frozenset[str] = frozenset({
+    "data_source_s3", "processing_job", "training_job",
+    "model_register", "endpoint_realtime",
+})
 
 TOOL_NODE_TYPES: frozenset[str] = frozenset({
     "tool_custom", "tool_athena", "tool_s3", "tool_http", "tool_bedrock",
@@ -94,11 +102,17 @@ class Canvas(BaseModel):
     viewport: CanvasViewport = Field(default_factory=CanvasViewport)
 
 
+ProjectType = Literal["agent", "ml_pipeline"]
+
+
 class Project(BaseModel):
     schema_version: str = "1.0.0"
     platform_version: str = "0.1.0"
     name: str
     description: str = ""
+    # "agent" → LangGraph + AgentCore Runtime (default; backward compatible).
+    # "ml_pipeline" → SageMaker Pipelines SDK + Endpoint deploy (ML Studio canvas).
+    project_type: ProjectType = "agent"
     created_at: datetime = Field(default_factory=datetime.utcnow)
     exported_at: datetime | None = None
     tags: list[str] = Field(default_factory=list)
