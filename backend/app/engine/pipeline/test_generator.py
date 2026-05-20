@@ -43,6 +43,7 @@ def _gen_tool_test(node: Node) -> CompiledFile:
         "tool_s3": _test_tool_s3,
         "tool_http": _test_tool_http,
         "tool_bedrock": _test_tool_bedrock,
+        "feature_lookup": _test_tool_feature_lookup,
     }
     generator = dispatch.get(node.type, _test_generic)
     return generator(node)
@@ -174,6 +175,30 @@ def test_{fn}_invokes_bedrock():
         mock_client.return_value.invoke_model.return_value = mock_response
         result = {fn}.invoke({{"prompt": "hello"}})
     assert isinstance(result, dict)
+'''
+    return CompiledFile(path=f"tests/test_{fn}.py", content=content)
+
+
+def _test_tool_feature_lookup(node: Node) -> CompiledFile:
+    fn = _fn_name(node)
+    record_id_key = node.config.get("record_identifier_value_source", "record_id")
+    content = f'''\
+from unittest.mock import MagicMock, patch
+
+from agent.tools.{node.id} import {fn}
+
+
+def test_{fn}_reads_online_record():
+    mock_response = {{
+        "Record": [
+            {{"FeatureName": "credit_score", "ValueAsString": "720"}},
+            {{"FeatureName": "tier", "ValueAsString": "gold"}},
+        ]
+    }}
+    with patch("boto3.client") as mock_client:
+        mock_client.return_value.get_record.return_value = mock_response
+        result = {fn}.invoke({{{record_id_key!r}: "cust-123"}})
+    assert result == {{"credit_score": "720", "tier": "gold"}}
 '''
     return CompiledFile(path=f"tests/test_{fn}.py", content=content)
 

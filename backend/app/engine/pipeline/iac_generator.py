@@ -45,9 +45,114 @@ def generate_iac(project: Project, sorted_nodes: list[Node]) -> CompiledArtifact
         identity_tf = _gen_agentcore_identity_tf(agent_name, project.nodes)
         if identity_tf is not None:
             artifacts.add(identity_tf)
+
+    feature_group_nodes = [n for n in project.nodes if n.type == "feature_group_define"]
+    if feature_group_nodes:
+        artifacts.add(_gen_feature_groups_tf(feature_group_nodes))
+
     artifacts.add(_gen_dev_tfvars(agent_name, has_memory, has_mcp_server))
 
     return artifacts
+
+
+_FEATURE_TYPE_MAP = {
+    "STRING": "String",
+    "TIMESTAMP": "String",
+    "DATE": "String",
+    "BOOLEAN": "String",
+    "INT": "Integral",
+    "INTEGER": "Integral",
+    "BIGINT": "Integral",
+    "LONG": "Integral",
+    "FLOAT": "Fractional",
+    "DOUBLE": "Fractional",
+    "DECIMAL": "Fractional",
+}
+
+
+def _gen_feature_groups_tf(feature_group_nodes: list[Node]) -> CompiledFile:
+    """Emits infra/feature_groups.tf for every feature_group_define node.
+
+    Each node declares a SageMaker Feature Group with online + offline stores.
+    The Glue table is auto-created so Athena can query the offline store.
+    `features` config is a list of {name, type} dicts (type follows the SageMaker
+    convention: String / Integral / Fractional; raw SQL types are mapped).
+    """
+    blocks = []
+    for n in feature_group_nodes:
+        feature_group_name = n.config.get("feature_group_name", "")
+        record_id = n.config.get("record_identifier_feature_name", "")
+        event_time = n.config.get("event_time_feature_name", "event_time")
+        online_enabled = bool(n.config.get("online_enabled", True))
+        features = n.config.get("features", []) or []
+
+        tf_name = feature_group_name.replace("-", "_").replace(" ", "_") or n.id
+
+        feature_defs = []
+        seen = set()
+        for f in features:
+            fname = f.get("name", "")
+            if not fname or fname in seen:
+                continue
+            seen.add(fname)
+            raw_type = f.get("type", "String")
+            ftype = _FEATURE_TYPE_MAP.get(str(raw_type).upper(), raw_type)
+            feature_defs.append(
+                f'  feature_definition {{\n'
+                f'    feature_name = "{fname}"\n'
+                f'    feature_type = "{ftype}"\n'
+                f'  }}'
+            )
+        if event_time not in seen:
+            feature_defs.append(
+                f'  feature_definition {{\n'
+                f'    feature_name = "{event_time}"\n'
+                f'    feature_type = "Fractional"\n'
+                f'  }}'
+            )
+        feature_def_block = "\n".join(feature_defs)
+
+        blocks.append(f'''\
+resource "aws_sagemaker_feature_group" "{tf_name}" {{
+  feature_group_name             = "{feature_group_name}"
+  record_identifier_feature_name = "{record_id}"
+  event_time_feature_name        = "{event_time}"
+  role_arn                       = var.feature_store_role_arn
+
+  online_store_config {{
+    enable_online_store = {str(online_enabled).lower()}
+  }}
+
+  offline_store_config {{
+    s3_storage_config {{
+      s3_uri = "s3://${{var.feature_store_bucket}}/${{var.agent_name}}/{feature_group_name}/"
+    }}
+    disable_glue_table_creation = false
+  }}
+
+{feature_def_block}
+}}''')
+
+    header = '''\
+# SageMaker Feature Groups declared via feature_group_define nodes in the canvas.
+# Set var.feature_store_role_arn and var.feature_store_bucket in dev.tfvars
+# before apply (the IAM role needs s3:PutObject on the bucket and
+# sagemaker:CreateFeatureGroup).
+
+variable "feature_store_role_arn" {
+  description = "IAM role assumed by SageMaker Feature Store for offline-store writes."
+  type        = string
+  default     = ""
+}
+
+variable "feature_store_bucket" {
+  description = "S3 bucket name for the offline store."
+  type        = string
+  default     = ""
+}
+
+'''
+    return CompiledFile(path="infra/feature_groups.tf", content=header + "\n\n".join(blocks) + "\n")
 
 
 def _gen_ecr_tf(agent_name: str) -> CompiledFile:
@@ -190,6 +295,17 @@ def _tool_policy_statements(n: Node) -> str:
     sid     = "SecretsManager"
     actions = ["secretsmanager:GetSecretValue"]
     resources = ["arn:aws:secretsmanager:${{var.aws_region}}:*:secret:{secret_name}*"]
+  }}'''
+
+    if node_type == "feature_lookup":
+        feature_group_name = n.config.get("feature_group_name", "")
+        return f'''\
+{logs_statement}
+
+  statement {{
+    sid     = "FeatureStoreOnlineRead"
+    actions = ["sagemaker:DescribeFeatureGroup", "sagemaker-featurestore-runtime:GetRecord", "sagemaker-featurestore-runtime:BatchGetRecord"]
+    resources = ["arn:aws:sagemaker:${{var.aws_region}}:*:feature-group/{feature_group_name}"]
   }}'''
 
     # tool_custom and fallback — logs only

@@ -6,8 +6,10 @@ from collections import defaultdict
 from ..._types import CompiledFile
 from ...models.graph import TOOL_NODE_TYPES, Node, Project
 
-# These node types are not added as graph.add_node() — they're handled differently
-_EXCLUDED_GRAPH_NODES = frozenset({"input", "mcp_server"} | TOOL_NODE_TYPES)
+# These node types are not added as graph.add_node() — they're handled differently.
+# feature_group_define is declarative: it emits Terraform (infra/feature_groups.tf)
+# and has no runtime Python function.
+_EXCLUDED_GRAPH_NODES = frozenset({"input", "mcp_server", "feature_group_define"} | TOOL_NODE_TYPES)
 
 # Condition nodes are used as routing fns in add_conditional_edges, not as graph nodes
 _ROUTING_ONLY_TYPES = frozenset({"condition"})

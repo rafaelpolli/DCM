@@ -14,6 +14,7 @@ def generate_tool(node: Node) -> CompiledFile:
         "tool_s3": _gen_tool_s3,
         "tool_http": _gen_tool_http,
         "tool_bedrock": _gen_tool_bedrock,
+        "feature_lookup": _gen_tool_feature_lookup,
     }
     generator = dispatch.get(node.type)
     if generator is None:
@@ -322,6 +323,59 @@ def {fn}(input: dict) -> dict:
         accept="application/json",
     )
     return json.loads(response["body"].read())
+'''
+    return CompiledFile(path=f"agent/tools/{node.id}.py", content=content)
+
+
+def _gen_tool_feature_lookup(node: Node) -> CompiledFile:
+    """SageMaker Feature Store online lookup tool.
+
+    Reads a record from the online store via featurestore-runtime:GetRecord.
+    The agent passes the value of the record identifier (the PK) and receives
+    a {feature_name: value} dict.
+    """
+    fn = _fn_name(node)
+    desc = node.config.get("description", "")
+    feature_group = node.config.get("feature_group_name", "")
+    # Where to pull the record identifier value from the tool input payload.
+    # Default: input["record_id"]. Users can override to e.g. "customer_id".
+    record_id_key = node.config.get("record_identifier_value_source", "record_id")
+    feature_names = node.config.get("feature_names", []) or []
+
+    if feature_names:
+        feature_names_arg = (
+            "        FeatureNames=["
+            + ", ".join(f'"{f}"' for f in feature_names)
+            + "],"
+        )
+    else:
+        feature_names_arg = "        # FeatureNames omitted → returns every feature in the record."
+
+    content = f'''\
+import boto3
+from langchain_core.tools import tool
+
+# featurestore-runtime is the online (low-latency) plane; the offline store
+# lives on S3 and is queried via Athena/Glue.
+_featurestore = boto3.client("sagemaker-featurestore-runtime")
+
+
+@tool
+def {fn}(input: dict) -> dict:
+    """{desc}
+
+    input: dict with key {record_id_key!r} carrying the record identifier value
+    (the PK declared in feature_group_define / DCM contract).
+    Returns a flat {{feature_name: value}} mapping, or {{}} when the record is absent.
+    """
+    record_id_value = str(input[{record_id_key!r}])
+    response = _featurestore.get_record(
+        FeatureGroupName="{feature_group}",
+        RecordIdentifierValueAsString=record_id_value,
+{feature_names_arg}
+    )
+    record = response.get("Record", [])
+    return {{f["FeatureName"]: f["ValueAsString"] for f in record}}
 '''
     return CompiledFile(path=f"agent/tools/{node.id}.py", content=content)
 

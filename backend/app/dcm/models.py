@@ -62,6 +62,20 @@ class HistoryEntry(BaseModel):
     note: str
 
 
+class MLMetadata(BaseModel):
+    """Reference to the SageMaker Feature Group this contract was promoted to.
+
+    Populated by POST /api/dcm/contracts/{id}/promote-feature-group; consumed
+    by the agents Studio (feature_lookup tool) so a single contract is the
+    source of truth for both data governance and ML features.
+    """
+    feature_group_name: str = ""
+    feature_group_arn: str = ""
+    record_identifier: str = ""           # PK field of the contract
+    event_time_feature_name: str = "event_time"
+    online_enabled: bool = True
+
+
 class Contract(BaseModel):
     id: str
     name: str
@@ -82,6 +96,7 @@ class Contract(BaseModel):
     partitioning: Partitioning = Field(default_factory=Partitioning)
     fields: list[FieldSchema] = Field(default_factory=list)
     history: list[HistoryEntry] = Field(default_factory=list)
+    ml_metadata: MLMetadata | None = None
 
 
 class ContractCreate(BaseModel):
@@ -194,3 +209,18 @@ class DashboardStats(BaseModel):
     approved_this_month: int
     pii_fields: int
     by_layer: dict[str, int]
+
+
+# ── Feature Store promotion ───────────────────────────────────────────────────────
+
+class PromoteFeatureGroupRequest(BaseModel):
+    feature_group_name: str = ""             # defaults to contract.name when empty
+    online_enabled: bool = True
+    event_time_feature_name: str = "event_time"
+
+
+class PromoteFeatureGroupResponse(BaseModel):
+    feature_group_name: str
+    terraform: str                            # snippet a apply on the customer's AWS account
+    feature_definitions: list[dict]           # nome + tipo (String / Integral / Fractional)
+    record_identifier: str

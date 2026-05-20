@@ -26,6 +26,9 @@ from app.dcm.models import (
     ContractCreate,
     ContractListResponse,
     ExportResponse,
+    MLMetadata,
+    PromoteFeatureGroupRequest,
+    PromoteFeatureGroupResponse,
 )
 
 router = APIRouter()
@@ -368,3 +371,141 @@ def add_comment(
     save_change_request(req)
 
     return {"ok": True, "comment": comment}
+
+
+# ── Feature Store promotion ──────────────────────────────────────────────────
+
+# Maps DCM contract field types to SageMaker Feature Store feature definitions.
+_FEATURE_TYPE_MAP = {
+    "STRING": "String",
+    "VARCHAR": "String",
+    "TEXT": "String",
+    "TIMESTAMP": "String",   # event time stays String; Feature Store parses ISO
+    "DATE": "String",
+    "BOOLEAN": "String",     # Feature Store has no Bool type — store as String
+    "INT": "Integral",
+    "INTEGER": "Integral",
+    "BIGINT": "Integral",
+    "LONG": "Integral",
+    "FLOAT": "Fractional",
+    "DOUBLE": "Fractional",
+    "DECIMAL": "Fractional",
+    "NUMERIC": "Fractional",
+}
+
+
+def _contract_to_feature_definitions(contract: dict, event_time_name: str) -> list[dict]:
+    defs = []
+    seen = set()
+    for f in contract.get("fields", []):
+        name = f.get("name", "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        sm_type = _FEATURE_TYPE_MAP.get(f.get("type", "STRING").upper(), "String")
+        defs.append({"FeatureName": name, "FeatureType": sm_type})
+    if event_time_name not in seen:
+        defs.append({"FeatureName": event_time_name, "FeatureType": "Fractional"})
+    return defs
+
+
+def _terraform_for_feature_group(
+    feature_group_name: str,
+    record_identifier: str,
+    event_time_feature_name: str,
+    online_enabled: bool,
+    feature_definitions: list[dict],
+) -> str:
+    feature_blocks = "\n".join(
+        f'  feature_definition {{\n'
+        f'    feature_name = "{d["FeatureName"]}"\n'
+        f'    feature_type = "{d["FeatureType"]}"\n'
+        f'  }}'
+        for d in feature_definitions
+    )
+
+    return f'''\
+# Promoted from DCM contract.
+# Apply with: terraform apply -target=aws_sagemaker_feature_group.{feature_group_name.replace("-", "_")}
+
+resource "aws_sagemaker_feature_group" "{feature_group_name.replace("-", "_")}" {{
+  feature_group_name             = "{feature_group_name}"
+  record_identifier_feature_name = "{record_identifier}"
+  event_time_feature_name        = "{event_time_feature_name}"
+  role_arn                       = var.feature_store_role_arn
+
+  online_store_config {{
+    enable_online_store = {str(online_enabled).lower()}
+  }}
+
+  offline_store_config {{
+    s3_storage_config {{
+      s3_uri = "s3://${{var.feature_store_bucket}}/${{var.environment}}/{feature_group_name}/"
+    }}
+    disable_glue_table_creation = false
+  }}
+
+{feature_blocks}
+}}
+'''
+
+
+@router.post("/contracts/{cid}/promote-feature-group", response_model=PromoteFeatureGroupResponse)
+def promote_feature_group(
+    cid: str,
+    body: PromoteFeatureGroupRequest,
+    user: Annotated[dict, Depends(get_current_user)],
+) -> PromoteFeatureGroupResponse:
+    """Promote a DCM contract to a SageMaker Feature Group.
+
+    Returns Terraform for `aws_sagemaker_feature_group` whose
+    `feature_definition` blocks mirror the contract's fields, plus the
+    record identifier (the contract's PK) and an event_time feature.
+    Also stamps ml_metadata back on the contract.
+    """
+    contract = _contracts.get(cid)
+    if not contract:
+        raise HTTPException(status_code=404, detail="Contract not found")
+
+    pk_fields = [f for f in contract.get("fields", []) if f.get("pk")]
+    if not pk_fields:
+        raise HTTPException(
+            status_code=400,
+            detail="Contract has no primary-key field. Mark one field as pk=true before promoting.",
+        )
+    if len(pk_fields) > 1:
+        raise HTTPException(
+            status_code=400,
+            detail="SageMaker Feature Group requires exactly one record identifier; contract has multiple pk fields.",
+        )
+    record_identifier = pk_fields[0]["name"]
+
+    feature_group_name = (body.feature_group_name or contract["name"]).strip()
+    feature_definitions = _contract_to_feature_definitions(contract, body.event_time_feature_name)
+    tf = _terraform_for_feature_group(
+        feature_group_name=feature_group_name,
+        record_identifier=record_identifier,
+        event_time_feature_name=body.event_time_feature_name,
+        online_enabled=body.online_enabled,
+        feature_definitions=feature_definitions,
+    )
+
+    # Stamp back on the contract so the agents Studio can wire feature_lookup
+    # against the same group without re-asking the user.
+    contract["ml_metadata"] = MLMetadata(
+        feature_group_name=feature_group_name,
+        feature_group_arn="",   # filled in by terraform apply downstream
+        record_identifier=record_identifier,
+        event_time_feature_name=body.event_time_feature_name,
+        online_enabled=body.online_enabled,
+    ).model_dump()
+
+    from app.dcm.storage import save_contract
+    save_contract(contract)
+
+    return PromoteFeatureGroupResponse(
+        feature_group_name=feature_group_name,
+        terraform=tf,
+        feature_definitions=feature_definitions,
+        record_identifier=record_identifier,
+    )

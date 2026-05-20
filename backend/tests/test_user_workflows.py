@@ -420,6 +420,69 @@ def test_ingestion_no_agentcore_memory_or_apigw_runtime_dependency(ingestion_pro
     assert 'infra/api_gateway.tf' in iac.files
 
 
+def test_feature_lookup_and_feature_group_end_to_end():
+    """Agent with feature_group_define + feature_lookup compiles through the pipeline."""
+    from engine.pipeline.compiler.tool_gen import generate_tool
+
+    inp = make_node("input", "n_in", config={"trigger": "http"},
+                    outputs=[make_port("payload", "Payload", "json")])
+    agent = make_node("agent", "n_agent", config={
+        "model_id": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "system_prompt": "Use feature_lookup to enrich the user.",
+        "tools": ["n_feat"],
+    },
+        inputs=[make_port("input", "Input", "json")],
+        outputs=[make_port("response", "Response", "json")])
+    fg_define = make_node("feature_group_define", "n_fg", config={
+        "feature_group_name": "customer-profile",
+        "record_identifier_feature_name": "customer_id",
+        "event_time_feature_name": "event_time",
+        "online_enabled": True,
+        "features": [
+            {"name": "customer_id", "type": "STRING"},
+            {"name": "credit_score", "type": "INTEGER"},
+            {"name": "tier", "type": "STRING"},
+        ],
+    })
+    feat = make_node("feature_lookup", "n_feat", config={
+        "name": "lookup-profile",
+        "description": "Fetch the customer profile.",
+        "feature_group_name": "customer-profile",
+        "record_identifier_value_source": "customer_id",
+        "feature_names": ["credit_score", "tier"],
+    })
+    out = make_node("output", "n_out", config={"mode": "json"},
+                    inputs=[make_port("response", "Response", "json")])
+    edges = [
+        make_edge("n_in", "payload", "n_agent", "input", "json"),
+        make_edge("n_agent", "response", "n_out", "response", "json"),
+    ]
+    p = Project(name="fs-agent", nodes=[inp, agent, fg_define, feat, out], edges=edges)
+
+    result = validate(p)
+    assert result.valid, [e.to_dict() for e in result.errors]
+
+    iac = generate_iac(p, result.sorted_nodes)
+    # IAM scoped to the feature group.
+    iam = iac.files["infra/iam.tf"]
+    assert "sagemaker-featurestore-runtime:GetRecord" in iam
+    assert "feature-group/customer-profile" in iam
+    # Declarative TF for the feature group.
+    fg_tf = iac.files["infra/feature_groups.tf"]
+    assert 'aws_sagemaker_feature_group' in fg_tf
+    assert 'feature_group_name             = "customer-profile"' in fg_tf
+    assert 'feature_name = "credit_score"' in fg_tf
+    assert 'feature_type = "Integral"' in fg_tf
+    assert 'event_time_feature_name        = "event_time"' in fg_tf
+
+    # Tool code calls featurestore-runtime.
+    tool_file = generate_tool(feat)
+    assert tool_file.path == "agent/tools/n_feat.py"
+    assert 'boto3.client("sagemaker-featurestore-runtime")' in tool_file.content
+    assert 'FeatureGroupName="customer-profile"' in tool_file.content
+    assert 'FeatureNames=["credit_score", "tier"]' in tool_file.content
+
+
 def test_ingestion_full_zip_bundles(ingestion_project: Project):
     result = validate(ingestion_project)
     assert result.valid

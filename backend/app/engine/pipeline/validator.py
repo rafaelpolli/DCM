@@ -15,6 +15,8 @@ _REQUIRED_CONFIG: dict[str, list[str]] = {
     "tool_s3": ["name", "description", "operation", "bucket"],
     "tool_http": ["name", "description", "base_url", "method"],
     "tool_bedrock": ["name", "description", "operation"],
+    "feature_lookup": ["name", "description", "feature_group_name", "record_identifier_value_source"],
+    "feature_group_define": ["feature_group_name", "record_identifier_feature_name", "event_time_feature_name", "features"],
     "condition": ["expression", "expression_language"],
     "cache": ["backend", "key_expression"],
     "logger": ["level", "message_template"],
