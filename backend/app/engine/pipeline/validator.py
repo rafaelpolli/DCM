@@ -15,6 +15,7 @@ _REQUIRED_CONFIG: dict[str, list[str]] = {
     "tool_s3": ["name", "description", "operation", "bucket"],
     "tool_http": ["name", "description", "base_url", "method"],
     "tool_bedrock": ["name", "description", "operation"],
+    "tool_sagemaker_endpoint": ["name", "description", "endpoint_name", "content_type"],
     "condition": ["expression", "expression_language"],
     "cache": ["backend", "key_expression"],
     "logger": ["level", "message_template"],

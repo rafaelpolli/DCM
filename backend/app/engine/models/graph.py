@@ -12,6 +12,7 @@ NodeType = Literal[
     "input", "output",
     "agent", "multi_agent_coordinator", "human_in_the_loop",
     "tool_custom", "tool_athena", "tool_s3", "tool_http", "tool_bedrock",
+    "tool_sagemaker_endpoint",
     "kb_s3_vector", "kb_bedrock", "chunking", "embedding", "retriever",
     "s3_source", "document_parser", "ingest_pipeline",
     "mcp_server", "mcp_client",
@@ -21,6 +22,7 @@ NodeType = Literal[
 
 TOOL_NODE_TYPES: frozenset[str] = frozenset({
     "tool_custom", "tool_athena", "tool_s3", "tool_http", "tool_bedrock",
+    "tool_sagemaker_endpoint",
 })
 
 KB_NODE_TYPES: frozenset[str] = frozenset({

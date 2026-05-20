@@ -43,6 +43,7 @@ def _gen_tool_test(node: Node) -> CompiledFile:
         "tool_s3": _test_tool_s3,
         "tool_http": _test_tool_http,
         "tool_bedrock": _test_tool_bedrock,
+        "tool_sagemaker_endpoint": _test_tool_sagemaker_endpoint,
     }
     generator = dispatch.get(node.type, _test_generic)
     return generator(node)
@@ -173,6 +174,27 @@ def test_{fn}_invokes_bedrock():
     with patch("boto3.client") as mock_client:
         mock_client.return_value.invoke_model.return_value = mock_response
         result = {fn}.invoke({{"prompt": "hello"}})
+    assert isinstance(result, dict)
+'''
+    return CompiledFile(path=f"tests/test_{fn}.py", content=content)
+
+
+def _test_tool_sagemaker_endpoint(node: Node) -> CompiledFile:
+    fn = _fn_name(node)
+    content = f'''\
+import json
+from unittest.mock import MagicMock, patch
+
+from agent.tools.{node.id} import {fn}
+
+
+def test_{fn}_invokes_endpoint():
+    mock_response = {{
+        "Body": MagicMock(read=lambda: json.dumps({{"prediction": 0.42}}).encode())
+    }}
+    with patch("boto3.client") as mock_client:
+        mock_client.return_value.invoke_endpoint.return_value = mock_response
+        result = {fn}.invoke({{"features": [1, 2, 3]}})
     assert isinstance(result, dict)
 '''
     return CompiledFile(path=f"tests/test_{fn}.py", content=content)

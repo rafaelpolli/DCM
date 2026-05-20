@@ -420,6 +420,49 @@ def test_ingestion_no_agentcore_memory_or_apigw_runtime_dependency(ingestion_pro
     assert 'infra/api_gateway.tf' in iac.files
 
 
+def test_tool_sagemaker_endpoint_end_to_end():
+    """Agent with a tool_sagemaker_endpoint compiles through validator + IaC + tool gen."""
+    from engine.pipeline.compiler.tool_gen import generate_tool
+
+    inp = make_node("input", "n_in", config={"trigger": "http"},
+                    outputs=[make_port("payload", "Payload", "json")])
+    agent = make_node("agent", "n_agent", config={
+        "model_id": "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "system_prompt": "Use the predictor tool.",
+        "tools": ["n_sm"],
+    },
+        inputs=[make_port("input", "Input", "json")],
+        outputs=[make_port("response", "Response", "json")])
+    sm_tool = make_node("tool_sagemaker_endpoint", "n_sm", config={
+        "name": "predict-churn",
+        "description": "Calls the churn model.",
+        "endpoint_name": "churn-prod",
+        "content_type": "application/json",
+        "accept": "application/json",
+    })
+    out = make_node("output", "n_out", config={"mode": "json"},
+                    inputs=[make_port("response", "Response", "json")])
+    edges = [
+        make_edge("n_in", "payload", "n_agent", "input", "json"),
+        make_edge("n_agent", "response", "n_out", "response", "json"),
+    ]
+    p = Project(name="sm-agent", nodes=[inp, agent, sm_tool, out], edges=edges)
+
+    result = validate(p)
+    assert result.valid, [e.to_dict() for e in result.errors]
+
+    iac = generate_iac(p, result.sorted_nodes)
+    iam = iac.files["infra/iam.tf"]
+    assert "sagemaker:InvokeEndpoint" in iam
+    assert "endpoint/churn-prod" in iam
+
+    tool_file = generate_tool(sm_tool)
+    assert tool_file.path == "agent/tools/n_sm.py"
+    assert 'boto3.client("sagemaker-runtime")' in tool_file.content
+    assert 'EndpointName="churn-prod"' in tool_file.content
+    assert 'ContentType="application/json"' in tool_file.content
+
+
 def test_ingestion_full_zip_bundles(ingestion_project: Project):
     result = validate(ingestion_project)
     assert result.valid

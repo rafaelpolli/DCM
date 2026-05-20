@@ -192,6 +192,17 @@ def _tool_policy_statements(n: Node) -> str:
     resources = ["arn:aws:secretsmanager:${{var.aws_region}}:*:secret:{secret_name}*"]
   }}'''
 
+    if node_type == "tool_sagemaker_endpoint":
+        endpoint_name = n.config.get("endpoint_name", "")
+        return f'''\
+{logs_statement}
+
+  statement {{
+    sid     = "SageMakerInvokeEndpoint"
+    actions = ["sagemaker:InvokeEndpoint", "sagemaker:InvokeEndpointAsync"]
+    resources = ["arn:aws:sagemaker:${{var.aws_region}}:*:endpoint/{endpoint_name}"]
+  }}'''
+
     # tool_custom and fallback — logs only
     return logs_statement
 

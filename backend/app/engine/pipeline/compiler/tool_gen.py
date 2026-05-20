@@ -14,6 +14,7 @@ def generate_tool(node: Node) -> CompiledFile:
         "tool_s3": _gen_tool_s3,
         "tool_http": _gen_tool_http,
         "tool_bedrock": _gen_tool_bedrock,
+        "tool_sagemaker_endpoint": _gen_tool_sagemaker_endpoint,
     }
     generator = dispatch.get(node.type)
     if generator is None:
@@ -322,6 +323,71 @@ def {fn}(input: dict) -> dict:
         accept="application/json",
     )
     return json.loads(response["body"].read())
+'''
+    return CompiledFile(path=f"agent/tools/{node.id}.py", content=content)
+
+
+def _gen_tool_sagemaker_endpoint(node: Node) -> CompiledFile:
+    fn = _fn_name(node)
+    desc = node.config.get("description", "")
+    endpoint_name = node.config.get("endpoint_name", "")
+    content_type = node.config.get("content_type", "application/json")
+    accept = node.config.get("accept", content_type)
+    target_model = node.config.get("target_model", "")
+    inference_component = node.config.get("inference_component_name", "")
+
+    extra_kwargs = []
+    if target_model:
+        extra_kwargs.append(f'        TargetModel="{target_model}",')
+    if inference_component:
+        extra_kwargs.append(f'        InferenceComponentName="{inference_component}",')
+    extra_kwargs_block = "\n".join(extra_kwargs)
+
+    is_json = "json" in content_type.lower()
+    body_block = (
+        '    body = json.dumps(payload).encode("utf-8") if not isinstance(payload, (bytes, bytearray)) else bytes(payload)'
+        if is_json
+        else '    body = payload.encode("utf-8") if isinstance(payload, str) else bytes(payload)'
+    )
+
+    accept_is_json = "json" in accept.lower()
+    parse_block = (
+        '    try:\n'
+        '        return json.loads(raw)\n'
+        '    except json.JSONDecodeError:\n'
+        '        return {"raw": raw.decode("utf-8", errors="replace")}'
+        if accept_is_json
+        else '    return {"raw": raw.decode("utf-8", errors="replace")}'
+    )
+
+    content = f'''\
+import json
+
+import boto3
+from langchain_core.tools import tool
+
+# sagemaker-runtime client — invokes deployed SageMaker endpoints from this agent.
+_sagemaker = boto3.client("sagemaker-runtime")
+
+
+@tool
+def {fn}(payload) -> dict:
+    """{desc}
+
+    payload: dict, str, or bytes. Serialized according to content_type
+    ({content_type!r}) before being sent to endpoint {endpoint_name!r}.
+    """
+{body_block}
+
+    response = _sagemaker.invoke_endpoint(
+        EndpointName="{endpoint_name}",
+        ContentType="{content_type}",
+        Accept="{accept}",
+{extra_kwargs_block}
+        Body=body,
+    )
+    raw = response["Body"].read()
+{parse_block}
 '''
     return CompiledFile(path=f"agent/tools/{node.id}.py", content=content)
 
